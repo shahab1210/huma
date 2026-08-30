@@ -114,6 +114,43 @@ const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
   await connectDB();
+
+  // Auto-seed admin and settings on startup if database is fresh/empty
+  try {
+    const User = require('./models/User');
+    const BusinessSettings = require('./models/BusinessSettings');
+
+    const existingAdmin = await User.findOne({ role: 'ADMIN' });
+    if (!existingAdmin) {
+      console.log('🌱 No admin user found. Auto-seeding admin account...');
+      await User.create({
+        fullName: 'Huma Admin',
+        mobileNumber: 'admin',
+        email: 'humamehendi1210@gmail.com',
+        passwordHash: 'admin', // pre-save hook will hash it automatically
+        role: 'ADMIN',
+        isMobileVerified: true,
+        isActive: true,
+        authProviders: ['PASSWORD'],
+      });
+      console.log('✓ Admin user seeded successfully (admin / admin)');
+    }
+
+    const existingSettings = await BusinessSettings.findOne();
+    if (!existingSettings) {
+      console.log('🌱 No business settings found. Auto-seeding defaults...');
+      await BusinessSettings.create({
+        bookingAmount: 1500,
+        upiId: 'demo@upi',
+        upiQrImage: '',
+        paymentWhatsApp: '+918960600371',
+      });
+      console.log('✓ Default business settings seeded');
+    }
+  } catch (err) {
+    console.error('✕ Failed to auto-seed database on start:', err.message);
+  }
+
   app.listen(PORT, () => {
     console.log(`
 ╔═══════════════════════════════════════════════════╗

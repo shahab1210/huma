@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { type Service, type ServiceType, type Availability } from "../services/api";
+import { type Service, type ServiceType, type Availability, BASE_URL } from "../services/api";
 
 // --- TYPES ---
 export interface CartItem {
@@ -412,7 +412,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Customer Authentication API integration
   const loginCustomer = async (mobile: string, pass: string): Promise<boolean> => {
     try {
-      const res = await fetch("/api/auth/login", {
+      const res = await fetch(`${BASE_URL}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mobileNumber: mobile, password: pass }),
@@ -461,7 +461,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const res = await fetch("/api/auth/register", {
+      const res = await fetch(`${BASE_URL}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fullName: nameStr, mobileNumber: mobileStr, password: passStr }),
@@ -492,7 +492,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Admin Authentication API integration
   const loginAdmin = async (user: string, pass: string): Promise<{ success: boolean; awaitingSecurityAnswer?: boolean; tempToken?: string; question?: string; message?: string }> => {
     try {
-      const res = await fetch("/api/auth/admin/login", {
+      const res = await fetch(`${BASE_URL}/auth/admin/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mobileNumber: user, password: pass }),
@@ -522,7 +522,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const verifyAdminSecurityAnswer = async (tempToken: string, securityAnswer: string): Promise<boolean> => {
     try {
       const fingerprint = navigator.userAgent;
-      const res = await fetch("/api/auth/admin/verify-security-answer", {
+      const res = await fetch(`${BASE_URL}/auth/admin/verify-security-answer`, {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
@@ -564,7 +564,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!refreshToken) return false;
 
       const fingerprint = navigator.userAgent;
-      const res = await fetch("/api/auth/admin/refresh-token", {
+      const res = await fetch(`${BASE_URL}/auth/admin/refresh-token`, {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
@@ -594,7 +594,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   ): Promise<{ success: boolean; updateToken?: string; message?: string }> => {
     try {
       const token = localStorage.getItem("huma_admin_token");
-      const res = await fetch("/api/auth/admin/update-credentials-request", {
+      const res = await fetch(`${BASE_URL}/auth/admin/update-credentials-request`, {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
@@ -621,7 +621,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const verifyAdminCredentialsChange = async (updateToken: string, otpCode: string): Promise<{ success: boolean; message?: string }> => {
     try {
       const token = localStorage.getItem("huma_admin_token");
-      const res = await fetch("/api/auth/admin/update-credentials-verify", {
+      const res = await fetch(`${BASE_URL}/auth/admin/update-credentials-verify`, {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
@@ -645,7 +645,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const sendWhatsAppOtp = async (mobileNumber: string, purpose: string): Promise<{ success: boolean; message?: string }> => {
     try {
-      const res = await fetch("/api/auth/send-whatsapp-otp", {
+      const res = await fetch(`${BASE_URL}/auth/send-whatsapp-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mobileNumber, purpose }),
@@ -663,7 +663,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     purpose: string
   ): Promise<{ success: boolean; token?: string; user?: any; message?: string; resetToken?: string }> => {
     try {
-      const res = await fetch("/api/auth/verify-whatsapp-otp", {
+      const res = await fetch(`${BASE_URL}/auth/verify-whatsapp-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mobileNumber, otp, purpose }),
@@ -700,7 +700,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     idToken: string
   ): Promise<{ success: boolean; requiresMobile?: boolean; googleProfile?: any; token?: string; user?: any; message?: string }> => {
     try {
-      const res = await fetch("/api/auth/google", {
+      const res = await fetch(`${BASE_URL}/auth/google`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ idToken }),
@@ -739,7 +739,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     fullName: string;
   }): Promise<{ success: boolean; message?: string }> => {
     try {
-      const res = await fetch("/api/auth/google/complete-registration", {
+      const res = await fetch(`${BASE_URL}/auth/google/complete-registration`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -754,7 +754,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const linkGoogleAccount = async (idToken: string): Promise<{ success: boolean; user?: any; message?: string }> => {
     try {
       const token = localStorage.getItem("huma_token");
-      const res = await fetch("/api/auth/google/link", {
+      const res = await fetch(`${BASE_URL}/auth/google/link`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -784,7 +784,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const forgotPasswordSendOtp = async (mobileNumber: string): Promise<{ success: boolean; message?: string }> => {
     try {
-      const res = await fetch("/api/auth/forgot-password/send-otp", {
+      const res = await fetch(`${BASE_URL}/auth/forgot-password/send-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mobileNumber }),
@@ -801,7 +801,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     otp: string
   ): Promise<{ success: boolean; resetToken?: string; message?: string }> => {
     try {
-      const res = await fetch("/api/auth/forgot-password/verify-otp", {
+      const res = await fetch(`${BASE_URL}/auth/forgot-password/verify-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mobileNumber, otp }),
@@ -815,7 +815,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const resetPassword = async (resetToken: string, newPassword: string): Promise<{ success: boolean; message?: string }> => {
     try {
-      const res = await fetch("/api/auth/reset-password", {
+      const res = await fetch(`${BASE_URL}/auth/reset-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ resetToken, newPassword }),
@@ -831,7 +831,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const fetchBusinessSettings = async () => {
     try {
-      const res = await fetch("/api/settings");
+      const res = await fetch(`${BASE_URL}/settings`);
       const data = await res.json();
       if (data.success && data.data?.settings) {
         setBusinessSettings(data.data.settings);
@@ -844,7 +844,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const updateBusinessSettings = async (settingsData: any): Promise<boolean> => {
     try {
       const token = localStorage.getItem("huma_admin_token");
-      const res = await fetch("/api/admin/settings", {
+      const res = await fetch(`${BASE_URL}/admin/settings`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -876,7 +876,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const token = localStorage.getItem("huma_token");
       const bookingObj = bookings.find((b) => b.bookingId === bookingId || b._id === bookingId);
 
-      const res = await fetch("/api/payments/submit-proof", {
+      const res = await fetch(`${BASE_URL}/payments/submit-proof`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -919,7 +919,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const adminConfirmPayment = async (paymentId: string, adminNote?: string): Promise<{ success: boolean; message?: string }> => {
     try {
       const token = localStorage.getItem("huma_admin_token");
-      const res = await fetch(`/api/payments/${paymentId}/verify`, {
+      const res = await fetch(`${BASE_URL}/payments/${paymentId}/verify`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -961,7 +961,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   ): Promise<{ success: boolean; message?: string }> => {
     try {
       const token = localStorage.getItem("huma_admin_token");
-      const res = await fetch(`/api/payments/${paymentId}/reject`, {
+      const res = await fetch(`${BASE_URL}/payments/${paymentId}/reject`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1043,7 +1043,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const customerToken = localStorage.getItem("huma_token");
 
       if (adminLoggedIn && adminToken) {
-        const res = await fetch("/api/admin/bookings", {
+        const res = await fetch(`${BASE_URL}/admin/bookings`, {
           headers: {
             Authorization: `Bearer ${adminToken}`,
           },
@@ -1060,7 +1060,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           localStorage.setItem("huma_bookings", JSON.stringify(mapped));
         }
       } else if (user && customerToken) {
-        const res = await fetch("/api/bookings", {
+        const res = await fetch(`${BASE_URL}/bookings`, {
           headers: {
             Authorization: `Bearer ${customerToken}`,
           },

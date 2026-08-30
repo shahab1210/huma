@@ -3,6 +3,8 @@
     "concurrently": "^10.0.5"
   },
   "scripts": {
-    "dev": "concurrently \"npm run dev --prefix 'Design Website from Prompt'\" \"npm run dev --prefix backend\""
+    "dev": "concurrently \"npm run dev --prefix 'Design Website from Prompt'\" \"npm run dev --prefix backend\"",
+    "build": "npm install --prefix backend",
+    "start": "npm start --prefix backend"
   }
 }

@@ -55,21 +55,26 @@ export default function About() {
             travel charge</strong>, ensuring a relaxed, stress-free prep on your big day.
           </p>
           
-          <div className="pt-4 flex items-center justify-between">
+          <div className="pt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <button
               type="button"
               onClick={() => navigate("mehendi")}
-              className="rounded-md bg-brand px-6 py-3 text-sm font-semibold tracking-wide text-cream transition-colors hover:bg-brand-700"
+              className="rounded-md bg-brand px-6 py-3 text-sm font-semibold tracking-wide text-cream transition-colors hover:bg-brand-700 self-start"
             >
               Browse Catalog &amp; Book
             </button>
-            <button
-              type="button"
-              onClick={() => navigate("huma-secret-gate")}
-              className="text-[10px] text-muted/30 hover:text-gold uppercase tracking-wider font-semibold transition-colors"
-            >
-              Portal Login
-            </button>
+            <div className="flex flex-col items-start sm:items-end gap-1">
+              <button
+                type="button"
+                onClick={() => navigate("huma-secret-gate")}
+                className="text-[11px] text-muted/50 hover:text-gold uppercase tracking-wider font-semibold transition-colors"
+              >
+                Portal Login (Admin Access)
+              </button>
+              <p className="text-[9px] text-muted/40 block sm:hidden">
+                Admin: Access workspace portal directly on your mobile device here.
+              </p>
+            </div>
           </div>
         </div>
       </div>

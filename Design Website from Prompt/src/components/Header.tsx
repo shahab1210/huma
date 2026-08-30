@@ -4,6 +4,7 @@ import { useApp } from "../context/AppContext";
 export default function Header() {
   const { currentView, navigate, cart, user, adminLoggedIn } = useApp();
   const [scrolled, setScrolled] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40);
@@ -121,8 +122,108 @@ export default function Header() {
           >
             Book Now
           </button>
+
+          {/* Hamburger Menu Button */}
+          <button
+            type="button"
+            onClick={() => setIsOpen(!isOpen)}
+            className="flex p-1.5 text-brand/80 hover:text-gold transition-colors lg:hidden"
+            aria-label="Toggle menu"
+          >
+            <svg
+              className="h-6 w-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              {isOpen ? (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              )}
+            </svg>
+          </button>
         </div>
       </div>
+
+      {/* Mobile Nav Overlay */}
+      {isOpen && (
+        <div className="border-t border-hairline bg-cream/95 backdrop-blur lg:hidden">
+          <nav className="flex flex-col gap-4 px-5 py-6">
+            {navItems.map((item) => (
+              <button
+                key={item.view}
+                type="button"
+                onClick={() => {
+                  navigate(item.view);
+                  setIsOpen(false);
+                }}
+                className={`text-[12px] font-semibold uppercase tracking-[0.15em] text-left py-1.5 transition-colors hover:text-gold ${
+                  currentView === item.view ? "text-gold" : "text-brand/80"
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
+
+            {/* Mobile-only session actions */}
+            <div className="border-t border-hairline pt-4 mt-2 flex flex-col gap-4">
+              {user ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigate("dashboard");
+                    setIsOpen(false);
+                  }}
+                  className={`text-[12px] font-semibold uppercase tracking-[0.15em] text-left transition-colors hover:text-gold ${
+                    currentView === "dashboard" ? "text-gold" : "text-brand/80"
+                  }`}
+                >
+                  My Bookings
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigate("auth");
+                    setIsOpen(false);
+                  }}
+                  className={`text-[12px] font-semibold uppercase tracking-[0.15em] text-left transition-colors hover:text-gold ${
+                    currentView === "auth" ? "text-gold" : "text-brand/80"
+                  }`}
+                >
+                  Sign In
+                </button>
+              )}
+
+              {adminLoggedIn && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigate("admin-dashboard");
+                    setIsOpen(false);
+                  }}
+                  className="rounded border border-gold/40 px-3 py-2 text-[10px] uppercase tracking-wider text-gold hover:bg-gold/5 text-center font-bold"
+                >
+                  Admin Workspace
+                </button>
+              )}
+
+              {/* Discrete mobile admin shortcut portal */}
+              <button
+                type="button"
+                onClick={() => {
+                  navigate("huma-secret-gate");
+                  setIsOpen(false);
+                }}
+                className="text-[10.5px] text-muted/50 text-left uppercase tracking-wider font-semibold hover:text-gold transition-colors mt-2"
+              >
+                Portal Login (Admin Access)
+              </button>
+            </div>
+          </nav>
+        </div>
+      )}
     </header>
   );
 }

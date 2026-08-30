@@ -19,9 +19,33 @@ const app = express();
 
 /* ── Security ── */
 app.use(helmet());
+// Setup CORS: Split comma-separated FRONTEND_URLs and strip trailing slashes
+const allowedOrigins = process.env.FRONTEND_URL
+  ? process.env.FRONTEND_URL.split(',').map(url => url.trim().replace(/\/$/, ''))
+  : ['http://localhost:8443'];
+
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:8443',
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
+      
+      const normalizedOrigin = origin.replace(/\/$/, '');
+      const isAllowed = allowedOrigins.some(allowed => {
+        if (allowed === normalizedOrigin) return true;
+        // Allow dynamic Vercel previews if any Vercel domain is configured
+        if (allowed.includes('.vercel.app') && normalizedOrigin.endsWith('.vercel.app')) return true;
+        return false;
+      });
+
+      const isLocal = normalizedOrigin.startsWith('http://localhost') || normalizedOrigin.startsWith('http://127.0.0.1');
+
+      if (isAllowed || isLocal) {
+        callback(null, true);
+      } else {
+        console.warn(`[CORS Blocked] Origin: ${origin} not matched in:`, allowedOrigins);
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
   })
 );

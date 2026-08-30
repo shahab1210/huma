@@ -1,0 +1,13 @@
+@theme {
+  --color-cream: #fbf7f0;
+  --color-surface: #ffffff;
+  --color-brand: #2f4b3c;
+  --color-brand-700: #263d31;
+  --color-gold: #c9a46a;
+  --color-gold-soft: #e9d9bd;
+  --color-ink: #3a2f28;
+  --color-muted: #7a6d63;
+  --color-hairline: #e7dfd3;
+  --color-available: #4c7a5a;
+  --color-blocked: #b5654a;
+}

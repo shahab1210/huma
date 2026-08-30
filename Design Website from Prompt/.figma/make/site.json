@@ -1,0 +1,10 @@
+{
+  "description": "Create stunning websites effortlessly with customizable templates and user-friendly design tools, perfect for beginners and professionals alike.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

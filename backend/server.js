@@ -17,6 +17,7 @@ const adminRoutes = require('./routes/adminRoutes');
 const cronRoutes = require('./routes/cronRoutes');
 const locationRoutes = require('./routes/locationRoutes');
 const serviceGroupRoutes = require('./routes/serviceGroupRoutes');
+const whatsappRoutes = require("./routes/whatsappRoutes");
 
 const app = express();
 
@@ -35,7 +36,7 @@ app.use(
   cors({
     origin: function (origin, callback) {
       if (!origin) return callback(null, true);
-      
+
       const normalizedOrigin = origin.replace(/\/$/, '');
       const isAllowed = allowedOrigins.some(allowed => {
         if (allowed === normalizedOrigin) return true;
@@ -106,6 +107,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/cron', cronRoutes);
 app.use('/api', locationRoutes);
 app.use('/api', serviceGroupRoutes);
+app.use("/api/whatsapp", whatsappRoutes);
 
 /* ── 404 handler ── */
 app.use('*', (req, res) => {

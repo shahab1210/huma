@@ -45,6 +45,13 @@ export default function ServiceCard({ service }: { service: Service }) {
         <div className="absolute right-3 top-3">
           <AvailabilityPill status={service.availability} />
         </div>
+        {service.mrp && service.mrp > service.startingPrice && (
+          <div className="absolute left-3 top-3 rounded-full bg-red-500 px-2.5 py-0.5 text-[10px] font-bold text-white shadow-md">
+            {service.discountType === "PERCENTAGE" 
+              ? `${service.discountValue}% OFF` 
+              : `₹${(service.mrp - service.startingPrice).toLocaleString("en-IN")} OFF`}
+          </div>
+        )}
       </div>
 
       <div className="flex flex-1 flex-col px-5 pb-6 pt-5">
@@ -58,10 +65,17 @@ export default function ServiceCard({ service }: { service: Service }) {
         <span className="my-4 h-px w-10 bg-gold" aria-hidden />
 
         <p className="text-sm text-muted">{service.duration}</p>
-        <p className="mt-1 text-[15px] font-medium text-brand">
-          Starting from{" "}
-          <span className="text-gold">₹{service.startingPrice.toLocaleString("en-IN")}</span>
-        </p>
+        <div className="mt-1 flex items-baseline gap-2">
+          <p className="text-[15px] font-medium text-brand">
+            Starting from{" "}
+            <span className="text-gold font-bold">₹{service.startingPrice.toLocaleString("en-IN")}</span>
+          </p>
+          {service.mrp && service.mrp > service.startingPrice && (
+            <span className="text-xs text-muted line-through">
+              ₹{service.mrp.toLocaleString("en-IN")}
+            </span>
+          )}
+        </div>
 
         <button
           type="button"

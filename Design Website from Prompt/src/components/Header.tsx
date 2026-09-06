@@ -36,15 +36,19 @@ export default function Header() {
         <button
           type="button"
           onClick={() => navigate("home")}
-          className="flex items-center gap-2 text-left"
+          className="flex items-center gap-2.5 text-left group"
         >
-          <span className="text-lg text-gold" aria-hidden>
-            ❦
-          </span>
-          <span className="font-display text-lg leading-none text-brand">
-            Huma
-            <span className="ml-1 hidden text-sm text-muted sm:inline">Mehendi &amp; Beauty</span>
-          </span>
+          <div className="flex h-9.5 w-9.5 items-center justify-center rounded-full bg-gradient-to-br from-brand via-brand-700 to-gold/80 text-cream shadow-md group-hover:scale-105 transition-transform duration-300">
+            <span className="text-lg font-bold text-gold drop-shadow-sm">❦</span>
+          </div>
+          <div className="flex flex-col leading-none">
+            <span className="font-display text-xl font-bold uppercase tracking-wider text-brand group-hover:text-gold transition-colors">
+              HUMA
+            </span>
+            <span className="text-[9.5px] font-semibold uppercase tracking-[0.22em] text-gold mt-0.5">
+              Mehendi &amp; Beauty
+            </span>
+          </div>
         </button>
 
         {/* Desktop Nav */}

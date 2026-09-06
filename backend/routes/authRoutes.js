@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, requireAdmin } = require('../middleware/auth');
 const {
   register,
   sendOtp,
@@ -19,6 +19,9 @@ const {
   updateAdminCredentialsVerify,
   logout,
   getMe,
+  setAdminPin,
+  verifyAdminPin,
+  resetAdminPin,
 } = require('../controllers/authController');
 
 /* ── Customer Registration ── */
@@ -47,6 +50,10 @@ router.post('/admin/verify-security-answer', adminVerifySecurityAnswer);
 router.post('/admin/refresh-token', adminRefreshToken);
 router.post('/admin/update-credentials-request', requireAuth, updateAdminCredentialsRequest);
 router.post('/admin/update-credentials-verify', requireAuth, updateAdminCredentialsVerify);
+
+router.post('/admin/set-pin', requireAuth, requireAdmin, setAdminPin);
+router.post('/admin/verify-pin', requireAuth, requireAdmin, verifyAdminPin);
+router.post('/admin/reset-pin', requireAuth, requireAdmin, resetAdminPin);
 
 /* ── Session ── */
 router.post('/logout', requireAuth, logout);

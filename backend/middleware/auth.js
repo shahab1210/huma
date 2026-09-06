@@ -7,10 +7,26 @@ const User = require('../models/User');
  */
 const requireAuth = async (req, res, next) => {
   try {
-    let token;
+    let token = null;
 
+    // 1. Explicit Authorization header has top priority
     if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
       token = req.headers.authorization.split(' ')[1];
+    }
+
+    // 2. Otherwise check cookies based on route context
+    if (!token && req.cookies) {
+      const isUrlAdmin = req.originalUrl.includes('/admin') ||
+                         req.originalUrl.includes('/payments/') ||
+                         req.originalUrl.includes('/verify') ||
+                         req.originalUrl.includes('/partial') ||
+                         req.originalUrl.includes('/reject');
+
+      if (isUrlAdmin && req.cookies.huma_admin_token) {
+        token = req.cookies.huma_admin_token;
+      } else {
+        token = req.cookies.huma_token || req.cookies.huma_admin_token;
+      }
     }
 
     if (!token) {
@@ -59,9 +75,14 @@ const requireAdmin = (req, res, next) => {
  */
 const optionalAuth = async (req, res, next) => {
   try {
-    let token;
+    let token = null;
+
     if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
       token = req.headers.authorization.split(' ')[1];
+    }
+
+    if (!token && req.cookies) {
+      token = req.cookies.huma_token || req.cookies.huma_admin_token;
     }
 
     if (token) {

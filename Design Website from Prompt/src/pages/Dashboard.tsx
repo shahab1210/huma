@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useApp, type Booking } from "../context/AppContext";
 import ReviewModal from "../components/ReviewModal";
+import UpiPaymentModal from "../components/UpiPaymentModal";
 
 export default function Dashboard() {
   const {
@@ -14,6 +15,7 @@ export default function Dashboard() {
     navigate,
     showToast,
     linkGoogleAccount,
+    fetchMyBookings,
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<"bookings" | "profile">("bookings");
@@ -22,6 +24,9 @@ export default function Dashboard() {
   // Review Modal State
   const [reviewBooking, setReviewBooking] = useState<Booking | null>(null);
   const [showReviewModal, setShowReviewModal] = useState(false);
+
+  // Pay Remaining Modal State
+  const [payRemainingBooking, setPayRemainingBooking] = useState<Booking | null>(null);
 
   // Reschedule Modal State
   const [rescheduleBookingId, setRescheduleBookingId] = useState<string | null>(null);
@@ -32,6 +37,8 @@ export default function Dashboard() {
   // Cancel Confirmation Popup
   const [cancelBookingId, setCancelBookingId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState("");
+  const [customerUpiId, setCustomerUpiId] = useState("");
+  const [customerUpiName, setCustomerUpiName] = useState("");
 
   if (!user) {
     return (
@@ -75,6 +82,8 @@ export default function Dashboard() {
     switch (status) {
       case "CONFIRMED":
         return <span className="rounded-full bg-available/10 px-2.5 py-1 text-[10px] font-semibold text-available uppercase">Confirmed</span>;
+      case "AWAITING_REMAINING_PAYMENT":
+        return <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-semibold text-amber-800 uppercase">Awaiting Remaining Payment</span>;
       case "PENDING_PAYMENT":
         return <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-semibold text-amber-800 uppercase">Pending Payment</span>;
       case "PAYMENT_VERIFICATION_PENDING":
@@ -96,6 +105,8 @@ export default function Dashboard() {
     switch (status) {
       case "BOOKED_AMOUNT_PAID":
         return <span className="text-[11px] font-medium text-available">✓ Booking Fee Paid</span>;
+      case "PARTIAL_PAYMENT":
+        return <span className="text-[11px] font-medium text-amber-700">⏳ Partial Payment Verified</span>;
       case "REFUNDED":
         return <span className="text-[11px] font-medium text-blue-600">↺ Refunded</span>;
       case "FAILED":
@@ -124,11 +135,13 @@ export default function Dashboard() {
   const handleCancelClick = (b: Booking) => {
     setCancelBookingId(b.bookingId);
     setCancelReason("");
+    setCustomerUpiId("");
+    setCustomerUpiName("");
   };
 
-  const handleConfirmCancel = () => {
+  const handleConfirmCancel = async () => {
     if (!cancelBookingId || !cancelReason.trim()) return;
-    cancelBooking(cancelBookingId, cancelReason, true);
+    await cancelBooking(cancelBookingId, cancelReason, true, customerUpiId, customerUpiName);
     setCancelBookingId(null);
   };
 
@@ -258,6 +271,26 @@ export default function Dashboard() {
                         </div>
                       </div>
 
+                      {/* Partial payment details banner */}
+                      {(b.bookingStatus === "AWAITING_REMAINING_PAYMENT" || b.paymentStatus === "PARTIAL_PAYMENT") && (
+                        <div className="rounded-xl bg-amber-50/80 border border-amber-200 p-3.5 text-xs text-amber-900 space-y-1">
+                          <p className="font-bold text-amber-950 uppercase tracking-wider text-[10px]">Partial Payment Received:</p>
+                          <p className="leading-relaxed">
+                            Received: <strong>₹{(b.paidAmount || 0).toLocaleString("en-IN")}</strong> • Remaining Required: <strong>₹{(b.remainingAmount || (b.onlineBookingAmount - (b.paidAmount || 0))).toLocaleString("en-IN")}</strong>
+                          </p>
+                          <p className="text-[11px] text-amber-800">
+                            Please complete the remaining amount so your booking can be fully confirmed.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setPayRemainingBooking(b)}
+                            className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg bg-amber-700 hover:bg-amber-800 text-white px-3.5 py-1.5 font-semibold text-xs transition-colors shadow-sm"
+                          >
+                            Pay Remaining ₹{(b.remainingAmount || (b.onlineBookingAmount - (b.paidAmount || 0))).toLocaleString("en-IN")}
+                          </button>
+                        </div>
+                      )}
+
                       {/* Reschedule Pending Request Notice */}
                       {b.rescheduleRequest && b.rescheduleRequest.status === "PENDING" && (
                         <div className="rounded-lg bg-blue-50 border border-blue-100 p-3 text-xs text-blue-800">
@@ -265,10 +298,43 @@ export default function Dashboard() {
                         </div>
                       )}
 
-                      {/* Cancellation reason info */}
-                      {b.bookingStatus === "CANCELLED" && b.cancellationReason && (
-                        <div className="rounded-lg bg-red-50 border border-red-100 p-3 text-xs text-red-800">
-                          <strong>Cancellation Reason:</strong> {b.cancellationReason} (Cancelled by {b.cancelledBy})
+                      {/* Cancellation & Refund details info banner */}
+                      {b.bookingStatus === "CANCELLED" && (
+                        <div className="rounded-xl bg-red-50/90 border border-red-200 p-4 text-xs text-red-900 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <p className="font-bold text-red-950 uppercase tracking-wider text-[10px]">Order Cancellation &amp; Refund Status</p>
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
+                              b.refundStatus === "PROCESSED" || b.paymentStatus === "REFUNDED"
+                                ? "bg-green-100 text-green-800"
+                                : b.refundStatus === "PENDING"
+                                ? "bg-amber-100 text-amber-900"
+                                : "bg-stone-200 text-stone-700"
+                            }`}>
+                              {b.refundStatus === "PROCESSED" || b.paymentStatus === "REFUNDED"
+                                ? "✓ Refund Processed"
+                                : b.refundStatus === "PENDING"
+                                ? "⏳ Refund Under Review"
+                                : "Cancelled"}
+                            </span>
+                          </div>
+
+                          <p><strong>Reason:</strong> {b.cancellationReason || "Cancelled by customer"}</p>
+                          
+                          {(b.paidAmount > 0 || b.onlineBookingAmount > 0 || b.refundAmount !== undefined) && (
+                            <div className="rounded-lg bg-white/80 border border-red-100 p-2.5 space-y-1 text-stone-800 font-medium">
+                              <p>• Original Advance Paid: <strong>₹{(b.paidAmount || b.onlineBookingAmount || 0).toLocaleString("en-IN")}</strong></p>
+                              <p>• Refund Amount: <strong className="text-green-700">₹{(b.refundAmount || 0).toLocaleString("en-IN")}</strong></p>
+                              {b.customerUpiId && (
+                                <p>• Submitted Payout UPI: <span className="font-mono text-xs bg-stone-100 px-1.5 py-0.5 rounded text-stone-900 font-semibold">{b.customerUpiId}</span> {b.customerUpiName ? `(${b.customerUpiName})` : ""}</p>
+                              )}
+                              {b.refundTransactionId && (
+                                <p>• Refund Reference / UTR: <span className="font-mono text-xs bg-stone-100 px-1.5 py-0.5 rounded text-stone-900 select-all font-semibold">{b.refundTransactionId}</span></p>
+                              )}
+                              {b.adminRefundNote && (
+                                <p>• Admin Note: <em>"{b.adminRefundNote}"</em></p>
+                              )}
+                            </div>
+                          )}
                         </div>
                       )}
 
@@ -546,11 +612,41 @@ export default function Dashboard() {
                 />
               </div>
 
+              <div>
+                <label htmlFor="cancel-upi-id" className="block text-[11px] font-semibold text-gold uppercase tracking-wider">Your UPI ID for Refund Payout</label>
+                <input
+                  id="cancel-upi-id"
+                  type="text"
+                  placeholder="e.g. 9876543210@paytm or name@upi"
+                  value={customerUpiId}
+                  onChange={(e) => setCustomerUpiId(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-hairline bg-cream/30 px-3 py-2 text-sm text-ink focus:border-gold focus:outline-none font-mono"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="cancel-upi-name" className="block text-[11px] font-semibold text-gold uppercase tracking-wider">Account Holder Name on UPI Account</label>
+                <input
+                  id="cancel-upi-name"
+                  type="text"
+                  placeholder="Full name registered on UPI account..."
+                  value={customerUpiName}
+                  onChange={(e) => setCustomerUpiName(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-hairline bg-cream/30 px-3 py-2 text-sm text-ink focus:border-gold focus:outline-none"
+                />
+              </div>
+
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-900 leading-relaxed space-y-1 font-medium">
+                <p className="font-bold text-amber-950 uppercase tracking-wider text-[9px]">⚠️ Important Payout Notice:</p>
+                <p>• The UPI ID and Account Holder Name MUST match the original account/UPI used during payment verification.</p>
+                <p>• If you need to request payout to a different UPI account, please contact Admin directly via WhatsApp.</p>
+              </div>
+
               <div className="flex gap-2 pt-2 text-xs">
                 <button
                   type="button"
                   onClick={() => setCancelBookingId(null)}
-                  className="flex-1 rounded-md border border-hairline py-2.5 text-muted"
+                  className="flex-1 rounded-md border border-hairline py-2.5 text-muted font-semibold"
                 >
                   Go Back
                 </button>
@@ -558,7 +654,7 @@ export default function Dashboard() {
                   type="button"
                   disabled={!cancelReason.trim()}
                   onClick={handleConfirmCancel}
-                  className="flex-1 rounded-md bg-blocked py-2.5 font-semibold text-white disabled:bg-hairline disabled:text-muted"
+                  className="flex-1 rounded-md bg-blocked py-2.5 font-semibold text-white disabled:bg-hairline disabled:text-muted transition-colors"
                 >
                   Confirm Cancellation
                 </button>
@@ -575,6 +671,20 @@ export default function Dashboard() {
           onClose={() => setShowReviewModal(false)}
           onSubmit={handleReviewSubmit}
           serviceName={reviewBooking.items.map((i) => i.nameSnapshot).join(", ")}
+        />
+      )}
+
+      {/* Pay Remaining UpiPaymentModal */}
+      {payRemainingBooking && (
+        <UpiPaymentModal
+          isOpen={Boolean(payRemainingBooking)}
+          onClose={() => setPayRemainingBooking(null)}
+          onSubmitSuccess={() => {
+            setPayRemainingBooking(null);
+            fetchMyBookings();
+          }}
+          bookingId={payRemainingBooking._id || payRemainingBooking.bookingId}
+          onlineBookingAmount={payRemainingBooking.remainingAmount || (payRemainingBooking.onlineBookingAmount - (payRemainingBooking.paidAmount || 0))}
         />
       )}
     </div>

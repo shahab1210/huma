@@ -24,6 +24,9 @@ export interface Service {
   description: string;
   duration: string;
   startingPrice: number;
+  mrp?: number;
+  discountType?: "NONE" | "PERCENTAGE" | "FIXED";
+  discountValue?: number;
   image: string;
   featured?: boolean;
   availability: Availability;
@@ -40,6 +43,38 @@ export interface Testimonial {
 export interface Faq {
   q: string;
   a: string;
+}
+
+export interface LocationData {
+  _id: string;
+  name: string;
+  slug: string;
+  shortDescription: string;
+  description: string;
+  heroImage: string;
+  gallery: string[];
+  seoTitle: string;
+  seoDescription: string;
+  seoKeywords: string;
+  nearbyAreas: string[];
+  availableServiceGroups: ServiceGroupData[];
+  isActive: boolean;
+  displayOrder: number;
+}
+
+export interface ServiceGroupData {
+  _id: string;
+  name: string;
+  slug: string;
+  parentType: ServiceType;
+  shortDescription: string;
+  description: string;
+  heroImage: string;
+  seoTitle: string;
+  seoDescription: string;
+  isActive: boolean;
+  displayOrder: number;
+  isFeatured: boolean;
 }
 
 const img = (id: string, w = 800, h = 1000) =>

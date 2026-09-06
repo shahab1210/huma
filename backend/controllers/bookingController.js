@@ -1,26 +1,38 @@
+const mongoose = require('mongoose');
 const Booking = require('../models/Booking');
 const Service = require('../models/Service');
 const Design = require('../models/Design');
 const TimeSlot = require('../models/TimeSlot');
 const BusinessSettings = require('../models/BusinessSettings');
+const Location = require('../models/Location');
 const generateBookingId = require('../utils/generateBookingId');
+const Payment = require('../models/Payment');
 const { ApiError } = require('../middleware/errorHandler');
 
 /**
  * POST /api/bookings
  * Create a new booking. Requires authenticated customer.
  *
- * Body: { items: [{ itemType, itemId, quantity }], serviceArea, address, bookingDate, timeSlotId, customerNotes }
+ * Body: { items: [{ itemType, itemId, quantity }], serviceArea, address, bookingDate, timeSlotId, customerNotes, locationId }
  */
 const createBooking = async (req, res, next) => {
   try {
-    const { items, serviceArea, address, bookingDate, timeSlotId, customerNotes } = req.body;
+    const { items, serviceArea, address, bookingDate, timeSlotId, customerNotes, locationId } = req.body;
 
     if (!items || !items.length) throw new ApiError(400, 'At least one item is required.');
     if (!serviceArea) throw new ApiError(400, 'Service area is required.');
     if (!address) throw new ApiError(400, 'Address is required.');
     if (!bookingDate) throw new ApiError(400, 'Booking date is required.');
     if (!timeSlotId) throw new ApiError(400, 'Time slot is required.');
+
+    // Find the dynamic Location document
+    let locationDoc = null;
+    if (locationId) {
+      locationDoc = await Location.findById(locationId);
+    }
+    if (!locationDoc) {
+      locationDoc = await Location.findOne({ name: new RegExp(`^${serviceArea}$`, 'i') });
+    }
 
     // ── 1. Validate & snapshot items ──
     const bookingItems = [];
@@ -96,6 +108,9 @@ const createBooking = async (req, res, next) => {
       customer: req.user._id,
       items: bookingItems,
       serviceArea,
+      location: locationDoc ? locationDoc._id : undefined,
+      locationName: locationDoc ? locationDoc.name : '',
+      locationSlug: locationDoc ? locationDoc.slug : '',
       address,
       bookingDate: new Date(bookingDate),
       timeSlot: `${slot.startTime} - ${slot.endTime}`,
@@ -134,7 +149,30 @@ const getMyBookings = async (req, res, next) => {
       .sort({ createdAt: -1 })
       .populate('customer', 'fullName mobileNumber');
 
-    res.json({ success: true, data: { bookings } });
+    const bookingIds = bookings.map((b) => b._id);
+    const payments = await Payment.find({ booking: { $in: bookingIds } }).sort({ createdAt: -1 });
+    const paymentMap = {};
+    payments.forEach((p) => {
+      if (!paymentMap[p.booking.toString()]) {
+        paymentMap[p.booking.toString()] = p;
+      }
+    });
+
+    const enrichedBookings = bookings.map((b) => {
+      const bObj = b.toObject();
+      const p = paymentMap[b._id.toString()];
+      if (p) {
+        if (!bObj.transactionId && p.transactionId) {
+          bObj.transactionId = p.transactionId;
+        }
+        if (!bObj.paymentScreenshot && p.paymentScreenshot) {
+          bObj.paymentScreenshot = p.paymentScreenshot;
+        }
+      }
+      return bObj;
+    });
+
+    res.json({ success: true, data: { bookings: enrichedBookings } });
   } catch (error) {
     next(error);
   }
@@ -146,8 +184,12 @@ const getMyBookings = async (req, res, next) => {
  */
 const getBookingById = async (req, res, next) => {
   try {
-    const booking = await Booking.findById(req.params.id)
-      .populate('customer', 'fullName mobileNumber email');
+    const booking = await Booking.findOne({
+      $or: [
+        mongoose.Types.ObjectId.isValid(req.params.id) ? { _id: req.params.id } : null,
+        { bookingId: req.params.id },
+      ].filter(Boolean),
+    }).populate('customer', 'fullName mobileNumber email');
 
     if (!booking) throw new ApiError(404, 'Booking not found.');
 
@@ -156,7 +198,18 @@ const getBookingById = async (req, res, next) => {
       throw new ApiError(403, 'You can only view your own bookings.');
     }
 
-    res.json({ success: true, data: { booking } });
+    const bObj = booking.toObject();
+    const p = await Payment.findOne({ booking: booking._id }).sort({ createdAt: -1 });
+    if (p) {
+      if (!bObj.transactionId && p.transactionId) {
+        bObj.transactionId = p.transactionId;
+      }
+      if (!bObj.paymentScreenshot && p.paymentScreenshot) {
+        bObj.paymentScreenshot = p.paymentScreenshot;
+      }
+    }
+
+    res.json({ success: true, data: { booking: bObj } });
   } catch (error) {
     next(error);
   }
@@ -168,10 +221,15 @@ const getBookingById = async (req, res, next) => {
  */
 const cancelBooking = async (req, res, next) => {
   try {
-    const booking = await Booking.findById(req.params.id);
+    const booking = await Booking.findOne({
+      $or: [
+        mongoose.Types.ObjectId.isValid(req.params.id) ? { _id: req.params.id } : null,
+        { bookingId: req.params.id },
+      ].filter(Boolean),
+    });
     if (!booking) throw new ApiError(404, 'Booking not found.');
 
-    if (booking.customer.toString() !== req.user._id.toString()) {
+    if (booking.customer.toString() !== req.user._id.toString() && req.user.role !== 'ADMIN') {
       throw new ApiError(403, 'You can only cancel your own bookings.');
     }
 
@@ -203,12 +261,25 @@ const cancelBooking = async (req, res, next) => {
     booking.cancelledBy = 'CUSTOMER';
     booking.cancelledAt = new Date();
     booking.refundAmount = refundAmount;
+    if (req.body.customerUpiId) booking.customerUpiId = req.body.customerUpiId;
+    if (req.body.customerUpiName) booking.customerUpiName = req.body.customerUpiName;
 
-    if (refundAmount > 0) {
-      booking.paymentStatus = 'REFUNDED';
+    // Update paymentStatus so it does not remain pending verification
+    if (booking.paymentStatus === 'PAYMENT_VERIFICATION_PENDING' || booking.paidAmount > 0) {
+      booking.refundStatus = 'PENDING';
+      booking.paymentStatus = refundAmount > 0 ? 'REFUNDED' : 'REJECTED';
+    } else {
+      booking.paymentStatus = 'REJECTED';
     }
 
     await booking.save();
+
+    // Update associated Payment document
+    const Payment = require('../models/Payment');
+    await Payment.updateMany(
+      { booking: booking._id },
+      { status: 'REJECTED', adminNote: 'Booking cancelled by customer' }
+    );
 
     // Release the time slot
     if (booking.timeSlotId) {
@@ -243,7 +314,12 @@ const requestReschedule = async (req, res, next) => {
       throw new ApiError(400, 'Requested date and slot are required.');
     }
 
-    const booking = await Booking.findById(req.params.id);
+    const booking = await Booking.findOne({
+      $or: [
+        mongoose.Types.ObjectId.isValid(req.params.id) ? { _id: req.params.id } : null,
+        { bookingId: req.params.id },
+      ].filter(Boolean),
+    });
     if (!booking) throw new ApiError(404, 'Booking not found.');
 
     if (booking.customer.toString() !== req.user._id.toString()) {

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { type Service, type ServiceType, type Availability, BASE_URL } from "../services/api";
+import { type Service, type ServiceType, type Availability, type LocationData, type ServiceGroupData, BASE_URL } from "../services/api";
 
 // --- TYPES ---
 export interface CartItem {
@@ -30,8 +30,8 @@ export interface Booking {
   onlineBookingAmount: number;
   paidAmount: number;
   remainingAmount: number;
-  paymentStatus: "PENDING" | "PAYMENT_VERIFICATION_PENDING" | "BOOKED_AMOUNT_PAID" | "FAILED" | "REFUNDED" | "REJECTED";
-  bookingStatus: "PENDING_PAYMENT" | "PAYMENT_VERIFICATION_PENDING" | "CONFIRMED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | "RESCHEDULED" | "PAYMENT_REJECTED";
+  paymentStatus: "PENDING" | "PAYMENT_VERIFICATION_PENDING" | "BOOKED_AMOUNT_PAID" | "PARTIAL_PAYMENT" | "FAILED" | "REFUNDED" | "REJECTED";
+  bookingStatus: "PENDING_PAYMENT" | "PAYMENT_VERIFICATION_PENDING" | "CONFIRMED" | "AWAITING_REMAINING_PAYMENT" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | "RESCHEDULED" | "PAYMENT_REJECTED";
   cancellationReason?: string;
   cancelledBy?: "CUSTOMER" | "ADMIN";
   paymentMethod?: "RAZORPAY" | "UPI_MANUAL";
@@ -39,6 +39,13 @@ export interface Booking {
   paymentScreenshot?: string;
   rejectionReason?: string;
   adminNote?: string;
+  refundStatus?: "NONE" | "PENDING" | "PROCESSED" | "REJECTED";
+  refundAmount?: number;
+  adminRefundNote?: string;
+  refundProcessedAt?: string;
+  refundTransactionId?: string;
+  customerUpiId?: string;
+  customerUpiName?: string;
   rescheduleRequest?: {
     requestedDate: string;
     requestedSlot: string;
@@ -100,8 +107,11 @@ export interface AppContextType {
 
   // Catalog
   services: Service[];
-  addOrUpdateService: (service: Service) => void;
-  deleteService: (id: string) => void;
+  categories: any[];
+  addOrUpdateService: (service: any) => Promise<void>;
+  deleteService: (id: string, type: string) => Promise<void>;
+  fetchCategories: () => Promise<void>;
+  fetchCatalog: () => Promise<void>;
 
   // Cart
   cart: Service[];
@@ -116,7 +126,7 @@ export interface AppContextType {
   bookings: Booking[];
   createBooking: (bookingData: Omit<Booking, "bookingId" | "paymentStatus" | "bookingStatus" | "createdAt" | "paidAmount" | "remainingAmount">) => Booking;
   confirmBookingPayment: (bookingId: string, paymentId: string) => void;
-  cancelBooking: (bookingId: string, reason: string, isCustomer: boolean) => void;
+  cancelBooking: (bookingId: string, reason: string, isCustomer: boolean, customerUpiId?: string, customerUpiName?: string) => Promise<{ success: boolean; message?: string }>;
   requestReschedule: (bookingId: string, date: string, slot: string, reason: string) => void;
   respondToReschedule: (bookingId: string, approve: boolean) => void;
   updateBookingStatus: (bookingId: string, status: Booking["bookingStatus"]) => void;
@@ -159,8 +169,19 @@ export interface AppContextType {
   fetchBusinessSettings: () => Promise<void>;
   updateBusinessSettings: (settingsData: any) => Promise<boolean>;
   submitPaymentProof: (bookingId: string, transactionId: string, paymentScreenshot: string) => Promise<{ success: boolean; message?: string }>;
-  adminConfirmPayment: (paymentId: string, adminNote?: string) => Promise<{ success: boolean; message?: string }>;
+  adminConfirmPayment: (paymentId: string, adminNote?: string, pin?: string) => Promise<{ success: boolean; message?: string }>;
   adminRejectPayment: (paymentId: string, rejectionReason: string, adminNote?: string) => Promise<{ success: boolean; message?: string }>;
+  adminPartialPayment: (paymentId: string, verifiedAmount: number, adminNote?: string) => Promise<{ success: boolean; message?: string }>;
+  adminProcessRefund: (bookingId: string, refundAmount: number, adminRefundNote?: string, refundTransactionId?: string, pin?: string) => Promise<{ success: boolean; message?: string }>;
+  setAdminPin: (pin: string, currentPin?: string) => Promise<{ success: boolean; message?: string }>;
+  verifyAdminPin: (pin: string) => Promise<{ success: boolean; message?: string }>;
+  locations: LocationData[];
+  serviceGroups: ServiceGroupData[];
+  selectedLocation: LocationData | null;
+  setSelectedLocation: (location: LocationData | null) => void;
+  fetchLocations: () => Promise<void>;
+  fetchServiceGroups: () => Promise<void>;
+  loadingStates: Record<string, boolean>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -285,6 +306,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Core Data
   const [services, setServices] = useState<Service[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [cart, setCart] = useState<Service[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -292,32 +314,47 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [serviceAreas, setServiceAreas] = useState<string[]>(["Lucknow", "Kanpur", "Raebareli", "Bachhrawan", "Lalganj"]);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [businessSettings, setBusinessSettings] = useState<AppContextType["businessSettings"]>(null);
+  const [locations, setLocations] = useState<LocationData[]>([]);
+  const [serviceGroups, setServiceGroups] = useState<ServiceGroupData[]>([]);
+  const [selectedLocation, setSelectedLocation] = useState<LocationData | null>(null);
+  const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>({});
 
-  // Listen to hash changes for routing
+  const setLoading = (key: string, value: boolean) => {
+    setLoadingStates((prev) => ({ ...prev, [key]: value }));
+  };
+
+  // Listen to path changes for routing (SEO-friendly)
   useEffect(() => {
-    const handleHashChange = () => {
-      const hash = window.location.hash.replace("#/", "");
-      if (!hash) {
-        setCurrentView("home");
-      } else {
-        setCurrentView(hash);
-      }
+    const handlePathChange = () => {
+      const path = window.location.pathname.replace(/^\//, '') || 'home';
+      setCurrentView(path);
       window.scrollTo(0, 0);
     };
 
-    window.addEventListener("hashchange", handleHashChange);
-    handleHashChange(); // Trigger on mount
+    window.addEventListener('popstate', handlePathChange);
+    handlePathChange(); // Trigger on mount
 
-    return () => window.removeEventListener("hashchange", handleHashChange);
+    return () => window.removeEventListener('popstate', handlePathChange);
   }, []);
 
   const navigate = (view: string) => {
-    window.location.hash = `/${view}`;
+    const url = view === 'home' ? '/' : `/${view}`;
+    window.history.pushState({}, '', url);
+    setCurrentView(view === 'home' ? 'home' : view);
+    window.scrollTo(0, 0);
   };
 
   // Load from local storage on mount
   useEffect(() => {
     fetchBusinessSettings();
+    fetchLocations();
+    fetchServiceGroups();
+    fetchCategories();
+    fetchCatalog();
+    
+    const storedLocation = localStorage.getItem('huma_selected_location');
+    if (storedLocation) setSelectedLocation(JSON.parse(storedLocation));
+
     const storedUser = localStorage.getItem("huma_user");
     if (storedUser) setUser(JSON.parse(storedUser));
 
@@ -371,6 +408,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (interval) clearInterval(interval);
     };
   }, [adminLoggedIn]);
+
+  useEffect(() => {
+    if (selectedLocation) {
+      localStorage.setItem('huma_selected_location', JSON.stringify(selectedLocation));
+    }
+  }, [selectedLocation]);
 
   // Sync states to local storage
   const saveServices = (newServices: Service[]) => {
@@ -841,6 +884,100 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const fetchLocations = async () => {
+    try {
+      const res = await fetch(`${BASE_URL}/locations`);
+      const data = await res.json();
+      if (data.success) {
+        setLocations(data.data.locations);
+      }
+    } catch (err) {
+      console.error('Failed to fetch locations:', err);
+    }
+  };
+
+  const fetchServiceGroups = async () => {
+    try {
+      const res = await fetch(`${BASE_URL}/service-groups`);
+      const data = await res.json();
+      if (data.success) {
+        setServiceGroups(data.data.serviceGroups);
+      }
+    } catch (err) {
+      console.error('Failed to fetch service groups:', err);
+    }
+  };
+
+  const fetchCategories = async () => {
+    try {
+      const res = await fetch(`${BASE_URL}/categories`);
+      const data = await res.json();
+      if (data.success && data.data?.categories) {
+        setCategories(data.data.categories);
+      }
+    } catch (err) {
+      console.error('Failed to fetch categories:', err);
+    }
+  };
+
+  const fetchCatalog = async () => {
+    try {
+      const [resServices, resDesigns] = await Promise.all([
+        fetch(`${BASE_URL}/services`),
+        fetch(`${BASE_URL}/designs`),
+      ]);
+      const dataServices = await resServices.json();
+      const dataDesigns = await resDesigns.json();
+
+      let merged: Service[] = [];
+
+      if (dataServices.success && dataServices.data?.services) {
+        const mappedServices = dataServices.data.services.map((s: any) => ({
+          id: s._id,
+          type: s.serviceType,
+          name: s.name,
+          category: s.category?.name || s.category || '',
+          description: s.description || '',
+          duration: s.duration || '',
+          startingPrice: s.price || 0,
+          mrp: s.mrp || 0,
+          discountType: s.discountType || 'NONE',
+          discountValue: s.discountValue || 0,
+          image: s.images?.[0]?.url || s.image || '',
+          featured: !!s.isFeatured,
+          availability: s.isAvailable ? 'AVAILABLE' : 'BLOCKED',
+        }));
+        merged = [...merged, ...mappedServices];
+      }
+
+      if (dataDesigns.success && dataDesigns.data?.designs) {
+        const mappedDesigns = dataDesigns.data.designs.map((d: any) => ({
+          id: d._id,
+          type: 'MEHENDI',
+          name: d.name,
+          category: d.category?.name || d.category || '',
+          description: d.description || '',
+          duration: d.duration || '',
+          startingPrice: d.price || 0,
+          mrp: d.mrp || 0,
+          discountType: d.discountType || 'NONE',
+          discountValue: d.discountValue || 0,
+          image: d.images?.[0]?.url || d.image || '',
+          featured: !!d.isFeatured,
+          availability: d.isAvailable ? 'AVAILABLE' : 'BLOCKED',
+        }));
+        merged = [...merged, ...mappedDesigns];
+      }
+
+      if (merged.length > 0) {
+        setServices(merged);
+        localStorage.setItem("huma_services", JSON.stringify(merged));
+      }
+    } catch (e) {
+      console.error("Failed to fetch catalog from backend", e);
+    }
+  };
+
   const updateBusinessSettings = async (settingsData: any): Promise<boolean> => {
     try {
       const token = localStorage.getItem("huma_admin_token");
@@ -916,26 +1053,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const adminConfirmPayment = async (paymentId: string, adminNote?: string): Promise<{ success: boolean; message?: string }> => {
+  const adminConfirmPayment = async (paymentId: string, adminNote?: string, pin?: string): Promise<{ success: boolean; message?: string }> => {
     try {
+      setLoading('adminConfirmPayment', true);
       const token = localStorage.getItem("huma_admin_token");
       const res = await fetch(`${BASE_URL}/payments/${paymentId}/verify`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ adminNote }),
+        credentials: "include",
+        body: JSON.stringify({ adminNote, pin }),
       });
       const data = await res.json();
       if (data.success) {
         // Sync local bookings list
         const updated = bookings.map((b) => {
-          if (b.bookingId === data.data.booking.bookingId || b._id === data.data.booking._id) {
+          if (b.bookingId === data.data?.booking?.bookingId || (b as any)._id === data.data?.booking?._id) {
             return {
               ...b,
-              paymentStatus: "BOOKED_AMOUNT_PAID" as const,
-              bookingStatus: "CONFIRMED" as const,
+              paymentStatus: data.data.booking.paymentStatus || ("BOOKED_AMOUNT_PAID" as const),
+              bookingStatus: data.data.booking.bookingStatus || ("CONFIRMED" as const),
               paidAmount: data.data.booking.paidAmount,
               remainingAmount: data.data.booking.remainingAmount,
               adminNote,
@@ -951,6 +1090,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     } catch {
       return { success: false, message: "Failed to connect to server" };
+    } finally {
+      setLoading('adminConfirmPayment', false);
     }
   };
 
@@ -990,6 +1131,139 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       } else {
         return { success: false, message: data.message || "Failed to reject payment" };
       }
+    } catch {
+      return { success: false, message: "Failed to connect to server" };
+    }
+  };
+
+  const adminPartialPayment = async (
+    paymentId: string,
+    verifiedAmount: number,
+    adminNote?: string
+  ): Promise<{ success: boolean; message?: string }> => {
+    try {
+      setLoading('adminPartialPayment', true);
+      const token = localStorage.getItem("huma_admin_token");
+      const res = await fetch(`${BASE_URL}/payments/${paymentId}/partial`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: "include",
+        body: JSON.stringify({ verifiedAmount, adminNote }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        const updated = bookings.map((b) => {
+          if (b.bookingId === data.data?.booking?.bookingId || (b as any)._id === data.data?.booking?._id) {
+            return {
+              ...b,
+              paymentStatus: data.data.booking.paymentStatus,
+              bookingStatus: data.data.booking.bookingStatus,
+              paidAmount: data.data.booking.paidAmount,
+              remainingAmount: data.data.booking.remainingAmount,
+            };
+          }
+          return b;
+        });
+        setBookings(updated);
+        localStorage.setItem("huma_bookings", JSON.stringify(updated));
+        return { success: true, message: data.message };
+      } else {
+        return { success: false, message: data.message || "Failed to process partial payment" };
+      }
+    } catch {
+      return { success: false, message: "Failed to connect to server" };
+    } finally {
+      setLoading('adminPartialPayment', false);
+    }
+  };
+
+  const adminProcessRefund = async (
+    bookingId: string,
+    refundAmount: number,
+    adminRefundNote?: string,
+    refundTransactionId?: string,
+    pin?: string
+  ): Promise<{ success: boolean; message?: string }> => {
+    try {
+      setLoading('adminProcessRefund', true);
+      const token = localStorage.getItem("huma_admin_token");
+      const res = await fetch(`${BASE_URL}/payments/${bookingId}/process-refund`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: "include",
+        body: JSON.stringify({ refundAmount, adminRefundNote, refundTransactionId, pin }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        const updated = bookings.map((b) => {
+          if (b.bookingId === data.data?.booking?.bookingId || (b as any)._id === data.data?.booking?._id) {
+            return {
+              ...b,
+              bookingStatus: "CANCELLED" as const,
+              paymentStatus: "REFUNDED" as const,
+              refundStatus: "PROCESSED" as const,
+              refundAmount: data.data.booking.refundAmount,
+              adminRefundNote: data.data.booking.adminRefundNote,
+              refundTransactionId: data.data.booking.refundTransactionId,
+            };
+          }
+          return b;
+        });
+        setBookings(updated);
+        localStorage.setItem("huma_bookings", JSON.stringify(updated));
+        return { success: true, message: data.message };
+      } else {
+        return { success: false, message: data.message || "Failed to process refund" };
+      }
+    } catch {
+      return { success: false, message: "Failed to connect to server" };
+    } finally {
+      setLoading('adminProcessRefund', false);
+    }
+  };
+
+  const setAdminPin = async (pin: string, currentPin?: string): Promise<{ success: boolean; message?: string }> => {
+    try {
+      setLoading('setAdminPin', true);
+      const token = localStorage.getItem("huma_admin_token");
+      const res = await fetch(`${BASE_URL}/auth/admin/set-pin`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: "include",
+        body: JSON.stringify({ pin, currentPin }),
+      });
+      const data = await res.json();
+      return { success: data.success, message: data.message };
+    } catch {
+      return { success: false, message: "Failed to connect to server" };
+    } finally {
+      setLoading('setAdminPin', false);
+    }
+  };
+
+  const verifyAdminPin = async (pin: string): Promise<{ success: boolean; message?: string }> => {
+    try {
+      const token = localStorage.getItem("huma_admin_token");
+      const res = await fetch(`${BASE_URL}/auth/admin/verify-pin`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: "include",
+        body: JSON.stringify({ pin }),
+      });
+      const data = await res.json();
+      return { success: data.success, message: data.message };
     } catch {
       return { success: false, message: "Failed to connect to server" };
     }
@@ -1048,6 +1322,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             Authorization: `Bearer ${adminToken}`,
           },
         });
+        if (res.status === 401) {
+          setAdminLoggedIn(false);
+          localStorage.removeItem("huma_admin_logged_in");
+          localStorage.removeItem("huma_admin_token");
+          return;
+        }
         const data = await res.json();
         if (data.success && data.data?.bookings) {
           const mapped = data.data.bookings.map((b: any) => ({
@@ -1065,6 +1345,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             Authorization: `Bearer ${customerToken}`,
           },
         });
+        if (res.status === 401) {
+          setUser(null);
+          localStorage.removeItem("huma_user");
+          localStorage.removeItem("huma_token");
+          return;
+        }
         const data = await res.json();
         if (data.success && data.data?.bookings) {
           const mapped = data.data.bookings.map((b: any) => ({
@@ -1100,86 +1386,176 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     showToast("Payment verified! Booking confirmed successfully.");
   };
 
-  const cancelBooking = (bookingId: string, reason: string, isCustomer: boolean) => {
-    const updated = bookings.map((b) => {
-      if (b.bookingId === bookingId) {
-        // Calculate refund details based on 5-day policy
-        const bookingDate = new Date(b.bookingDate);
-        const today = new Date();
-        const diffTime = bookingDate.getTime() - today.getTime();
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  const cancelBooking = async (
+    bookingId: string,
+    reason: string,
+    isCustomer: boolean,
+    customerUpiId?: string,
+    customerUpiName?: string
+  ): Promise<{ success: boolean; message?: string }> => {
+    try {
+      setLoading('cancelBooking', true);
+      const token = localStorage.getItem("huma_token") || localStorage.getItem("huma_admin_token");
+      
+      const bObj = bookings.find((b) => b.bookingId === bookingId || (b as any)._id === bookingId);
+      const targetId = (bObj as any)?._id || bookingId;
 
-        let refundAmount = b.onlineBookingAmount;
-        if (isCustomer) {
-          // ₹500 cancellation fee applies
-          refundAmount = Math.max(0, b.onlineBookingAmount - 500);
-          // If within 5 days, generally non-refundable
-          if (diffDays <= 5) {
-            refundAmount = 0;
+      const res = await fetch(`${BASE_URL}/bookings/${targetId}/cancel`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: "include",
+        body: JSON.stringify({ reason, customerUpiId, customerUpiName }),
+      });
+      const data = await res.json();
+
+      const updated = bookings.map((b) => {
+        if (b.bookingId === bookingId || (b as any)._id === targetId) {
+          const bkData = data.data?.booking;
+          return {
+            ...b,
+            bookingStatus: "CANCELLED" as const,
+            paymentStatus: (bkData?.paymentStatus || "REFUNDED") as any,
+            refundStatus: (bkData?.refundStatus || "PENDING") as any,
+            refundAmount: bkData?.refundAmount ?? 0,
+            cancellationReason: reason,
+            cancelledBy: isCustomer ? ("CUSTOMER" as const) : ("ADMIN" as const),
+            customerUpiId: customerUpiId || bkData?.customerUpiId || b.customerUpiId,
+            customerUpiName: customerUpiName || bkData?.customerUpiName || b.customerUpiName,
+          };
+        }
+        return b;
+      });
+      setBookings(updated);
+      localStorage.setItem("huma_bookings", JSON.stringify(updated));
+      showToast(data.message || "Booking cancelled successfully.");
+      return { success: data.success ?? true, message: data.message };
+    } catch {
+      const updated = bookings.map((b) => {
+        if (b.bookingId === bookingId) {
+          return {
+            ...b,
+            bookingStatus: "CANCELLED" as const,
+            paymentStatus: "REFUNDED" as const,
+            refundStatus: "PENDING" as const,
+            cancellationReason: reason,
+            cancelledBy: isCustomer ? ("CUSTOMER" as const) : ("ADMIN" as const),
+            customerUpiId,
+            customerUpiName,
+          };
+        }
+        return b;
+      });
+      setBookings(updated);
+      localStorage.setItem("huma_bookings", JSON.stringify(updated));
+      showToast("Booking cancelled.");
+      return { success: true };
+    } finally {
+      setLoading('cancelBooking', false);
+    }
+  };
+
+  const requestReschedule = async (bookingId: string, date: string, slot: string, reason: string) => {
+    try {
+      setLoading('requestReschedule', true);
+      const token = localStorage.getItem("huma_token");
+      const bObj = bookings.find((b) => b.bookingId === bookingId || (b as any)._id === bookingId);
+      const targetId = (bObj as any)?._id || bookingId;
+
+      const res = await fetch(`${BASE_URL}/bookings/${targetId}/reschedule`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: "include",
+        body: JSON.stringify({ requestedDate: date, requestedSlot: slot, reason }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        const updated = bookings.map((b) => {
+          if (b.bookingId === bookingId || (b as any)._id === targetId) {
+            return {
+              ...b,
+              rescheduleRequest: {
+                requestedDate: date,
+                requestedSlot: slot,
+                reason,
+                status: "PENDING" as const,
+              },
+            };
           }
-        }
-
-        return {
-          ...b,
-          bookingStatus: "CANCELLED" as const,
-          paymentStatus: refundAmount === b.onlineBookingAmount ? ("REFUNDED" as const) : b.paymentStatus,
-          cancellationReason: reason,
-          cancelledBy: isCustomer ? ("CUSTOMER" as const) : ("ADMIN" as const),
-        };
+          return b;
+        });
+        setBookings(updated);
+        localStorage.setItem("huma_bookings", JSON.stringify(updated));
+        showToast("Reschedule request submitted to Admin.");
+      } else {
+        showToast(data.message || "Failed to submit reschedule request", "error");
       }
-      return b;
-    });
-    saveBookings(updated);
-    showToast("Booking cancelled successfully.");
+    } catch {
+      showToast("Failed to connect to server", "error");
+    } finally {
+      setLoading('requestReschedule', false);
+    }
   };
 
-  const requestReschedule = (bookingId: string, date: string, slot: string, reason: string) => {
-    const updated = bookings.map((b) => {
-      if (b.bookingId === bookingId) {
-        return {
-          ...b,
-          rescheduleRequest: {
-            requestedDate: date,
-            requestedSlot: slot,
-            reason,
-            status: "PENDING" as const,
-          },
-        };
-      }
-      return b;
-    });
-    saveBookings(updated);
-    showToast("Reschedule request submitted to Admin.");
-  };
+  const respondToReschedule = async (bookingId: string, approve: boolean) => {
+    try {
+      setLoading('respondToReschedule', true);
+      const token = localStorage.getItem("huma_admin_token");
+      const bObj = bookings.find((b) => b.bookingId === bookingId || (b as any)._id === bookingId);
+      const targetId = (bObj as any)?._id || bookingId;
 
-  const respondToReschedule = (bookingId: string, approve: boolean) => {
-    const updated = bookings.map((b) => {
-      if (b.bookingId === bookingId && b.rescheduleRequest) {
-        if (approve) {
-          return {
-            ...b,
-            bookingDate: b.rescheduleRequest.requestedDate,
-            timeSlot: b.rescheduleRequest.requestedSlot,
-            bookingStatus: "RESCHEDULED" as const,
-            rescheduleRequest: {
-              ...b.rescheduleRequest,
-              status: "APPROVED" as const,
-            },
-          };
-        } else {
-          return {
-            ...b,
-            rescheduleRequest: {
-              ...b.rescheduleRequest,
-              status: "REJECTED" as const,
-            },
-          };
-        }
+      const res = await fetch(`${BASE_URL}/admin/bookings/${targetId}/respond-reschedule`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: "include",
+        body: JSON.stringify({ approve }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        const updated = bookings.map((b) => {
+          if ((b.bookingId === bookingId || (b as any)._id === targetId) && b.rescheduleRequest) {
+            if (approve) {
+              return {
+                ...b,
+                bookingDate: b.rescheduleRequest.requestedDate,
+                timeSlot: b.rescheduleRequest.requestedSlot,
+                bookingStatus: "CONFIRMED" as const,
+                rescheduleRequest: {
+                  ...b.rescheduleRequest,
+                  status: "APPROVED" as const,
+                },
+              };
+            } else {
+              return {
+                ...b,
+                rescheduleRequest: {
+                  ...b.rescheduleRequest,
+                  status: "REJECTED" as const,
+                },
+              };
+            }
+          }
+          return b;
+        });
+        setBookings(updated);
+        localStorage.setItem("huma_bookings", JSON.stringify(updated));
+        showToast(`Reschedule request ${approve ? "approved" : "rejected"}.`);
+      } else {
+        showToast(data.message || "Failed to respond to reschedule", "error");
       }
-      return b;
-    });
-    saveBookings(updated);
-    showToast(approve ? "Reschedule request approved." : "Reschedule request rejected.");
+    } catch {
+      showToast("Failed to connect to server", "error");
+    } finally {
+      setLoading('respondToReschedule', false);
+    }
   };
 
   const updateBookingStatus = (bookingId: string, status: Booking["bookingStatus"]) => {
@@ -1266,22 +1642,92 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   // Catalog Settings CRUD
-  const addOrUpdateService = (service: Service) => {
-    const exists = services.some((s) => s.id === service.id);
-    let updated;
-    if (exists) {
-      updated = services.map((s) => (s.id === service.id ? service : s));
-    } else {
-      updated = [...services, service];
+  const addOrUpdateService = async (service: any) => {
+    try {
+      const adminToken = localStorage.getItem("huma_admin_token");
+      const isEdit = service.id && !service.id.startsWith("custom-");
+      
+      const endpoint = service.type === "MEHENDI" ? "designs" : "services";
+      const url = isEdit 
+        ? `${BASE_URL}/admin/${endpoint}/${service.id}`
+        : `${BASE_URL}/admin/${endpoint}`;
+      
+      // Resolve category: if it's an ObjectId, send it directly, otherwise try to find matching category by name
+      let categoryId = service.category;
+      const matchedCat = categories.find(c => c._id === categoryId || c.name === categoryId);
+      if (matchedCat) {
+        categoryId = matchedCat._id;
+      } else if (categories.length > 0) {
+        // Fallback to first matching category
+        const fallback = categories.find(c => c.serviceType === service.type);
+        categoryId = fallback ? fallback._id : categories[0]._id;
+      }
+
+      const bodyPayload = {
+        name: service.name,
+        category: categoryId,
+        description: service.description || '',
+        price: Number(service.startingPrice || 0),
+        mrp: Number(service.mrp || service.startingPrice || 0),
+        discountType: service.discountType || "NONE",
+        discountValue: Number(service.discountValue || 0),
+        duration: service.duration || '',
+        images: [{ url: service.image || "https://images.unsplash.com/photo-1762162089047-97e09435984d?w=800&h=1000" }],
+        isFeatured: !!service.featured,
+        isAvailable: service.availability === "AVAILABLE",
+        // for designs
+        startingPrice: Number(service.startingPrice || 0),
+        coverage: service.coverage || "Full hands",
+        customizationAvailable: true,
+        // for services
+        serviceType: service.type,
+      };
+
+      const res = await fetch(url, {
+        method: isEdit ? "PUT" : "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify(bodyPayload),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        showToast(`Catalog item "${service.name}" saved successfully.`);
+        fetchCatalog(); // Refresh catalog
+      } else {
+        showToast(data.message || "Failed to save item.", "error");
+      }
+    } catch (err) {
+      console.error("Failed to save catalog item:", err);
+      showToast("Error connecting to server", "error");
     }
-    saveServices(updated);
-    showToast(`Service "${service.name}" saved.`);
   };
 
-  const deleteService = (id: string) => {
-    const updated = services.filter((s) => s.id !== id);
-    saveServices(updated);
-    showToast("Service deleted from catalog");
+  const deleteService = async (id: string, type: string) => {
+    try {
+      const adminToken = localStorage.getItem("huma_admin_token");
+      const endpoint = type === "MEHENDI" ? "designs" : "services";
+      
+      const res = await fetch(`${BASE_URL}/admin/${endpoint}/${id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+        },
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        showToast("Item deleted from catalog.");
+        fetchCatalog(); // Refresh catalog
+      } else {
+        showToast(data.message || "Failed to delete item.", "error");
+      }
+    } catch (err) {
+      console.error("Failed to delete item:", err);
+      showToast("Error connecting to server", "error");
+    }
   };
 
   const addServiceArea = (area: string) => {
@@ -1356,11 +1802,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         submitPaymentProof,
         adminConfirmPayment,
         adminRejectPayment,
+        adminPartialPayment,
+        adminProcessRefund,
+        setAdminPin,
+        verifyAdminPin,
         fetchMyBookings,
         verifyAdminSecurityAnswer,
         refreshAdminToken,
         requestAdminCredentialsChange,
         verifyAdminCredentialsChange,
+        locations,
+        serviceGroups,
+        selectedLocation,
+        setSelectedLocation,
+        fetchLocations,
+        fetchServiceGroups,
+        categories,
+        fetchCategories,
+        fetchCatalog,
+        loadingStates,
       }}
     >
       {children}
@@ -1375,3 +1835,6 @@ export function useApp() {
   }
   return context;
 }
+
+// Alias for components that use this name
+export const useAppContext = useApp;

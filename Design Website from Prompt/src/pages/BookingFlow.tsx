@@ -11,6 +11,8 @@ export default function BookingFlow() {
     createBooking,
     showToast,
     navigate,
+    locations,
+    selectedLocation,
   } = useApp();
 
   const [step, setStep] = useState<"details" | "schedule" | "checkout" | "confirmed">("details");
@@ -18,7 +20,7 @@ export default function BookingFlow() {
   // Form States
   const [customerName, setCustomerName] = useState("");
   const [customerMobile, setCustomerMobile] = useState("");
-  const [selectedArea, setSelectedArea] = useState("");
+  const [selectedArea, setSelectedArea] = useState(selectedLocation ? selectedLocation.name : "");
   const [address, setAddress] = useState("");
   
   // Schedule States
@@ -37,6 +39,13 @@ export default function BookingFlow() {
       setCustomerMobile(user.mobileNumber);
     }
   }, [user]);
+
+  // Autofill location from selectedLocation
+  useEffect(() => {
+    if (selectedLocation) {
+      setSelectedArea(selectedLocation.name);
+    }
+  }, [selectedLocation]);
 
   // Load slots when date changes
   useEffect(() => {
@@ -118,19 +127,23 @@ export default function BookingFlow() {
       categorySnapshot: s.category,
     }));
 
+    const matchedLoc = locations.find((l) => l.name === selectedArea);
+    const locationId = matchedLoc ? matchedLoc._id : undefined;
+
     // Create the pending booking record
     const booking = createBooking({
       customerName,
       customerMobile,
       items,
       serviceArea: selectedArea,
+      locationId,
       address,
       bookingDate: selectedDate,
       timeSlot: selectedSlot,
       subtotal,
       totalAmount: subtotal,
       onlineBookingAmount,
-    });
+    } as any);
 
     setLatestBooking(booking);
     setShowPaymentModal(true);
@@ -227,11 +240,17 @@ export default function BookingFlow() {
                 className="mt-1 w-full rounded-lg border border-hairline bg-cream/30 px-3 py-2 text-sm text-ink focus:border-gold focus:outline-none"
               >
                 <option value="">-- Select your town/city --</option>
-                {serviceAreas.map((area) => (
-                  <option key={area} value={area}>
-                    {area}
-                  </option>
-                ))}
+                {locations && locations.length > 0
+                  ? locations.map((loc) => (
+                      <option key={loc._id} value={loc.name}>
+                        {loc.name}
+                      </option>
+                    ))
+                  : serviceAreas.map((area) => (
+                      <option key={area} value={area}>
+                        {area}
+                      </option>
+                    ))}
               </select>
             </div>
 

@@ -37,9 +37,13 @@ const errorHandler = (err, req, res, next) => {
     message = 'Authentication token has expired. Please login again.';
   }
 
-  console.error(`[ERROR] ${statusCode} — ${message}`);
-  if (process.env.NODE_ENV === 'development') {
-    console.error(err.stack);
+  if (statusCode >= 500) {
+    console.error(`[ERROR] ${statusCode} — ${message}`);
+    if (process.env.NODE_ENV === 'development') {
+      console.error(err.stack);
+    }
+  } else {
+    console.warn(`[WARN] ${statusCode} — ${message}`);
   }
 
   res.status(statusCode).json({

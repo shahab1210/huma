@@ -65,12 +65,12 @@ const paymentSchema = new mongoose.Schema(
     },
     paymentType: {
       type: String,
-      enum: ['BOOKING_AMOUNT'],
+      enum: ['BOOKING_AMOUNT', 'REMAINING_PAYMENT'],
       default: 'BOOKING_AMOUNT',
     },
     status: {
       type: String,
-      enum: ['CREATED', 'PENDING', 'PAID', 'FAILED', 'REFUNDED', 'VERIFIED', 'REJECTED'],
+      enum: ['CREATED', 'PENDING', 'PAID', 'PARTIAL', 'FAILED', 'REFUNDED', 'VERIFIED', 'REJECTED'],
       default: 'CREATED',
     },
   },

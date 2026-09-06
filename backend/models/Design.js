@@ -51,6 +51,25 @@ const designSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    mrp: {
+      type: Number,
+      default: 0,
+    },
+    discountType: {
+      type: String,
+      enum: ['NONE', 'PERCENTAGE', 'FIXED'],
+      default: 'NONE',
+    },
+    discountValue: {
+      type: Number,
+      default: 0,
+    },
+    serviceGroups: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'ServiceGroup',
+      },
+    ],
   },
   {
     timestamps: true,
@@ -60,5 +79,18 @@ const designSchema = new mongoose.Schema(
 designSchema.index({ category: 1 });
 designSchema.index({ isAvailable: 1 });
 designSchema.index({ isFeatured: 1 });
+
+designSchema.pre('save', function (next) {
+  if (this.mrp > 0) {
+    if (this.discountType === 'PERCENTAGE') {
+      this.price = Math.round(this.mrp * (1 - this.discountValue / 100));
+    } else if (this.discountType === 'FIXED') {
+      this.price = Math.max(0, this.mrp - this.discountValue);
+    } else {
+      this.price = this.mrp;
+    }
+  }
+  next();
+});
 
 module.exports = mongoose.model('Design', designSchema);

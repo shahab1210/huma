@@ -1,10 +1,16 @@
 import { useApp } from "../context/AppContext";
+import SEOHead from "../components/SEOHead";
 
 export default function About() {
   const { navigate } = useApp();
 
   return (
     <div className="mx-auto max-w-4xl px-5 py-24 lg:px-8">
+      <SEOHead
+        title="About Huma | Professional Mehendi Artist & Beauty Specialist"
+        description="Learn about Huma Mehendi & Beauty Artist — 10+ years of experience delivering premium bridal mehendi, Arabic henna designs & makeup across Lucknow, Raebareli & UP."
+        canonicalUrl="https://humamehendi.in/about"
+      />
       {/* Title */}
       <div className="mb-12 text-center">
         <p className="flex items-center justify-center gap-3 text-[11px] font-medium uppercase tracking-[0.28em] text-gold">

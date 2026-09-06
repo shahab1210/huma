@@ -80,6 +80,18 @@ const bookingSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Address is required'],
     },
+    location: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Location',
+    },
+    locationName: {
+      type: String,
+      default: '',
+    },
+    locationSlug: {
+      type: String,
+      default: '',
+    },
     bookingDate: {
       type: Date,
       required: [true, 'Booking date is required'],
@@ -114,7 +126,7 @@ const bookingSchema = new mongoose.Schema(
     },
     paymentStatus: {
       type: String,
-      enum: ['PENDING', 'PAYMENT_VERIFICATION_PENDING', 'BOOKING_AMOUNT_PAID', 'FAILED', 'REFUNDED', 'REJECTED'],
+      enum: ['PENDING', 'PAYMENT_VERIFICATION_PENDING', 'BOOKING_AMOUNT_PAID', 'PARTIAL_PAYMENT', 'FAILED', 'REFUNDED', 'REJECTED'],
       default: 'PENDING',
     },
     bookingStatus: {
@@ -123,6 +135,7 @@ const bookingSchema = new mongoose.Schema(
         'PENDING_PAYMENT',
         'PAYMENT_VERIFICATION_PENDING',
         'CONFIRMED',
+        'AWAITING_REMAINING_PAYMENT',
         'IN_PROGRESS',
         'COMPLETED',
         'CANCELLED',
@@ -141,7 +154,37 @@ const bookingSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    refundStatus: {
+      type: String,
+      enum: ['NONE', 'PENDING', 'PROCESSED', 'REJECTED'],
+      default: 'NONE',
+    },
+    adminRefundNote: {
+      type: String,
+      default: '',
+    },
+    refundProcessedAt: Date,
+    refundTransactionId: {
+      type: String,
+      default: '',
+    },
+    customerUpiId: {
+      type: String,
+      default: '',
+    },
+    customerUpiName: {
+      type: String,
+      default: '',
+    },
     rescheduleRequest: rescheduleRequestSchema,
+    transactionId: {
+      type: String,
+      default: '',
+    },
+    paymentScreenshot: {
+      type: String,
+      default: '',
+    },
     customerNotes: String,
   },
   {

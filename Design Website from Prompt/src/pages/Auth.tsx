@@ -30,6 +30,8 @@ type ViewState =
   | "forgot-otp"
   | "reset-password";
 
+let isGoogleInitializedGlobally = false;
+
 export default function Auth() {
   const {
     loginCustomer,
@@ -61,40 +63,9 @@ export default function Auth() {
   const [googleIdToken, setGoogleIdToken] = useState("");
   const [resetToken, setResetToken] = useState("");
 
-  const googleButtonRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (
-      (activeView === "otp-verify" ||
-        activeView === "google-otp" ||
-        activeView === "forgot-otp") &&
-      otpTimer > 0
-    ) {
-      interval = setInterval(() => {
-        setOtpTimer((prev) => prev - 1);
-      }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [activeView, otpTimer]);
-
-  useEffect(() => {
-    if (window.google?.accounts?.id && googleButtonRef.current) {
-      window.google.accounts.id.initialize({
-        client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID || "",
-        callback: handleGoogleResponse,
-      });
-      window.google.accounts.id.renderButton(
-        googleButtonRef.current,
-        {
-          theme: "outline",
-          size: "large",
-          text: "continue_with",
-          width: 320,
-        }
-      );
-    }
-  }, [activeView]);
+  const googleLoginButtonRef = useRef<HTMLDivElement>(null);
+  const googleRegisterButtonRef = useRef<HTMLDivElement>(null);
+  const handleGoogleResponseRef = useRef<(response: any) => void>(() => {});
 
   const handleGoogleResponse = async (response: any) => {
     if (response.credential) {
@@ -115,11 +86,68 @@ export default function Auth() {
         } else {
           showToast(result.message || "Google authentication failed", "error");
         }
-      } catch (err) {
+      } catch {
         showToast("Error during Google authentication", "error");
       }
     }
   };
+
+  handleGoogleResponseRef.current = handleGoogleResponse;
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (
+      (activeView === "otp-verify" ||
+        activeView === "google-otp" ||
+        activeView === "forgot-otp") &&
+      otpTimer > 0
+    ) {
+      interval = setInterval(() => {
+        setOtpTimer((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [activeView, otpTimer]);
+
+  useEffect(() => {
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    if (!clientId) return;
+
+    if (window.google?.accounts?.id) {
+      if (!isGoogleInitializedGlobally) {
+        try {
+          window.google.accounts.id.initialize({
+            client_id: clientId,
+            callback: (res: any) => handleGoogleResponseRef.current(res),
+            auto_select: false,
+            cancel_on_tap_outside: true,
+          });
+          isGoogleInitializedGlobally = true;
+        } catch (err) {
+          console.warn("Failed to initialize Google Sign-In:", err);
+        }
+      }
+
+      const targetRef = activeView === "login" ? googleLoginButtonRef : activeView === "register" ? googleRegisterButtonRef : null;
+
+      if (targetRef?.current && (activeView === "login" || activeView === "register")) {
+        try {
+          targetRef.current.innerHTML = "";
+          window.google.accounts.id.renderButton(
+            targetRef.current,
+            {
+              theme: "outline",
+              size: "large",
+              text: "continue_with",
+              width: 320,
+            }
+          );
+        } catch (err) {
+          console.warn("Failed to render Google button:", err);
+        }
+      }
+    }
+  }, [activeView]);
 
   const triggerGoogleAuth = () => {
     if (window.google?.accounts?.id) {
@@ -392,7 +420,7 @@ export default function Auth() {
                 </p>
               </div>
 
-              <div ref={googleButtonRef} className="w-full flex justify-center mt-2" />
+              <div ref={googleLoginButtonRef} className="w-full flex justify-center mt-2" />
             </form>
           )}
 
@@ -473,7 +501,7 @@ export default function Auth() {
                 </p>
               </div>
 
-              <div ref={googleButtonRef} className="w-full flex justify-center mt-2" />
+              <div ref={googleRegisterButtonRef} className="w-full flex justify-center mt-2" />
             </form>
           )}
 

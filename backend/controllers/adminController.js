@@ -115,10 +115,34 @@ const getAllBookings = async (req, res, next) => {
       Booking.countDocuments(filter),
     ]);
 
+    // Backfill transactionId and paymentScreenshot from Payment collection for legacy bookings
+    const bookingIds = bookings.map((b) => b._id);
+    const payments = await Payment.find({ booking: { $in: bookingIds } }).sort({ createdAt: -1 });
+    const paymentMap = {};
+    payments.forEach((p) => {
+      if (!paymentMap[p.booking.toString()]) {
+        paymentMap[p.booking.toString()] = p;
+      }
+    });
+
+    const enrichedBookings = bookings.map((b) => {
+      const bObj = b.toObject();
+      const p = paymentMap[b._id.toString()];
+      if (p) {
+        if (!bObj.transactionId && p.transactionId) {
+          bObj.transactionId = p.transactionId;
+        }
+        if (!bObj.paymentScreenshot && p.paymentScreenshot) {
+          bObj.paymentScreenshot = p.paymentScreenshot;
+        }
+      }
+      return bObj;
+    });
+
     res.json({
       success: true,
       data: {
-        bookings,
+        bookings: enrichedBookings,
         pagination: { page, limit, total, pages: Math.ceil(total / limit) },
       },
     });
@@ -239,12 +263,33 @@ const respondReschedule = async (req, res, next) => {
   }
 };
 
+const validateDiscounts = (mrp, discountType, discountValue) => {
+  if (mrp && mrp < 0) {
+    throw new ApiError(400, 'MRP cannot be negative.');
+  }
+  if (discountType === 'PERCENTAGE') {
+    if (discountValue < 0 || discountValue > 100) {
+      throw new ApiError(400, 'Percentage discount must be between 0 and 100.');
+    }
+  } else if (discountType === 'FIXED') {
+    if (discountValue < 0) {
+      throw new ApiError(400, 'Fixed discount cannot be negative.');
+    }
+    if (mrp && discountValue > mrp) {
+      throw new ApiError(400, 'Fixed discount cannot exceed MRP.');
+    }
+  }
+};
+
 /* ═══════════════════════════════════════════════════
    SERVICE CRUD (Makeup / Parlour)
    ═══════════════════════════════════════════════════ */
 
 const createService = async (req, res, next) => {
   try {
+    const { mrp, discountType, discountValue } = req.body;
+    validateDiscounts(mrp, discountType, discountValue);
+
     const service = await Service.create(req.body);
     res.status(201).json({ success: true, message: 'Service created.', data: { service } });
   } catch (error) {
@@ -254,11 +299,13 @@ const createService = async (req, res, next) => {
 
 const updateService = async (req, res, next) => {
   try {
-    const service = await Service.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true,
-    });
+    const { mrp, discountType, discountValue } = req.body;
+    validateDiscounts(mrp, discountType, discountValue);
+
+    const service = await Service.findById(req.params.id);
     if (!service) throw new ApiError(404, 'Service not found.');
+    Object.assign(service, req.body);
+    await service.save();
     res.json({ success: true, message: 'Service updated.', data: { service } });
   } catch (error) {
     next(error);
@@ -281,6 +328,9 @@ const deleteService = async (req, res, next) => {
 
 const createDesign = async (req, res, next) => {
   try {
+    const { mrp, discountType, discountValue } = req.body;
+    validateDiscounts(mrp, discountType, discountValue);
+
     const design = await Design.create(req.body);
     res.status(201).json({ success: true, message: 'Design created.', data: { design } });
   } catch (error) {
@@ -290,11 +340,13 @@ const createDesign = async (req, res, next) => {
 
 const updateDesign = async (req, res, next) => {
   try {
-    const design = await Design.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true,
-    });
+    const { mrp, discountType, discountValue } = req.body;
+    validateDiscounts(mrp, discountType, discountValue);
+
+    const design = await Design.findById(req.params.id);
     if (!design) throw new ApiError(404, 'Design not found.');
+    Object.assign(design, req.body);
+    await design.save();
     res.json({ success: true, message: 'Design updated.', data: { design } });
   } catch (error) {
     next(error);

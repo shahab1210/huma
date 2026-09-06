@@ -65,6 +65,10 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    securityPinHash: {
+      type: String,
+      default: "",
+    },
   },
   {
     timestamps: true,
@@ -95,10 +99,17 @@ userSchema.methods.compareSecurityAnswer = async function (candidateAnswer) {
   return bcrypt.compare(candidateAnswer.toLowerCase().trim(), this.securityAnswerHash);
 };
 
+// Compare security pin
+userSchema.methods.comparePin = async function(candidatePin) {
+  if (!this.securityPinHash || !candidatePin) return false;
+  return bcrypt.compare(String(candidatePin), this.securityPinHash);
+};
+
 // Never return passwordHash in JSON
 userSchema.methods.toJSON = function () {
   const obj = this.toObject();
   delete obj.passwordHash;
+  delete obj.securityPinHash;
   delete obj.googleId;
   delete obj.resetPasswordToken;
   delete obj.resetPasswordExpires;

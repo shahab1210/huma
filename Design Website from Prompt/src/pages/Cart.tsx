@@ -3,6 +3,9 @@ import { useApp } from "../context/AppContext";
 export default function Cart() {
   const { cart, removeFromCart, cartSubtotal, cartBookingAmount, cartRemainingAmount, navigate, user, showToast } = useApp();
 
+  const totalMrp = cart.reduce((sum, item) => sum + (item.mrp || item.startingPrice), 0);
+  const totalDiscount = totalMrp - cartSubtotal;
+
   const handleCheckout = () => {
     if (!user) {
       showToast("Please login or register first to proceed with booking", "warning");
@@ -70,14 +73,19 @@ export default function Cart() {
               </div>
 
               {/* Price & Delete */}
-              <div className="text-right flex flex-col items-end gap-2">
+              <div className="text-right flex flex-col items-end gap-1">
                 <p className="font-semibold text-brand text-sm">
                   ₹{s.startingPrice.toLocaleString("en-IN")}
                 </p>
+                {s.mrp && s.mrp > s.startingPrice && (
+                  <p className="text-xs text-muted line-through">
+                    ₹{s.mrp.toLocaleString("en-IN")}
+                  </p>
+                )}
                 <button
                   type="button"
                   onClick={() => removeFromCart(s.id)}
-                  className="text-xs font-semibold text-muted hover:text-blocked transition-colors"
+                  className="text-xs font-semibold text-muted hover:text-blocked transition-colors mt-1"
                   aria-label={`Remove ${s.name} from cart`}
                 >
                   Remove
@@ -106,8 +114,20 @@ export default function Cart() {
             {/* Split Details */}
             <div className="space-y-3 text-sm">
               <div className="flex justify-between text-muted">
-                <span>Subtotal Value</span>
-                <span className="font-medium text-brand">₹{cartSubtotal.toLocaleString("en-IN")}</span>
+                <span>Total MRP</span>
+                <span className="font-medium text-brand">₹{totalMrp.toLocaleString("en-IN")}</span>
+              </div>
+
+              {totalDiscount > 0 && (
+                <div className="flex justify-between text-[#b5654a] font-medium">
+                  <span>Bag Discount</span>
+                  <span>- ₹{totalDiscount.toLocaleString("en-IN")}</span>
+                </div>
+              )}
+
+              <div className="flex justify-between text-muted pt-2 border-t border-dashed border-hairline">
+                <span>Discounted Subtotal</span>
+                <span className="font-semibold text-brand">₹{cartSubtotal.toLocaleString("en-IN")}</span>
               </div>
 
               <div className="flex justify-between text-muted pt-2 border-t border-dashed border-hairline">

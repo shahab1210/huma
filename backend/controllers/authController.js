@@ -1,5 +1,7 @@
 const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { getCookieOptions } = require('../config/cookieConfig');
 const User = require('../models/User');
 const Otp = require('../models/Otp');
 const AdminSession = require('../models/AdminSession');
@@ -305,6 +307,8 @@ const verifyOtp = async (req, res, next) => {
 
       const token = generateToken(user._id, user.role);
 
+      res.cookie('huma_token', token, getCookieOptions(24 * 60 * 60 * 1000));
+
       return res.json({
         success: true,
         message: 'Mobile number verified. Account activated successfully!',
@@ -388,6 +392,8 @@ const login = async (req, res, next) => {
     }
 
     const token = generateToken(user._id, user.role);
+
+    res.cookie('huma_token', token, getCookieOptions(24 * 60 * 60 * 1000));
 
     res.json({
       success: true,
@@ -744,9 +750,8 @@ const resetPassword = async (req, res, next) => {
 
 const getDeviceFingerprint = (req) => {
   const userAgent = req.headers['user-agent'] || '';
-  const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
   const clientFingerprint = req.headers['x-device-fingerprint'] || '';
-  return crypto.createHash('sha256').update(userAgent + ip + clientFingerprint).digest('hex');
+  return crypto.createHash('sha256').update(`${userAgent}::${clientFingerprint}`).digest('hex');
 };
 
 const generateAdminTokens = async (user, fingerprint, req) => {
@@ -852,6 +857,9 @@ const adminVerifySecurityAnswer = async (req, res, next) => {
     const fingerprint = getDeviceFingerprint(req);
     const { accessToken, refreshToken } = await generateAdminTokens(user, fingerprint, req);
 
+    res.cookie('huma_admin_token', accessToken, getCookieOptions(15 * 60 * 1000));
+    res.cookie('huma_admin_refresh', refreshToken, getCookieOptions(7 * 24 * 60 * 60 * 1000));
+
     res.json({
       success: true,
       message: 'Admin verification successful.',
@@ -873,7 +881,7 @@ const adminVerifySecurityAnswer = async (req, res, next) => {
 
 const adminRefreshToken = async (req, res, next) => {
   try {
-    const { refreshToken } = req.body;
+    const refreshToken = req.cookies.huma_admin_refresh || req.body.refreshToken;
     if (!refreshToken) {
       throw new ApiError(400, 'Refresh token is required.');
     }
@@ -891,8 +899,12 @@ const adminRefreshToken = async (req, res, next) => {
       throw new ApiError(401, 'Invalid or expired session. Please log in again.');
     }
 
+    const adminId = session.adminId?._id || session.adminId;
+
     if (session.deviceFingerprint !== fingerprint) {
-      await AdminSession.updateMany({ adminId: session.adminId._id }, { isValid: false });
+      if (adminId) {
+        await AdminSession.updateMany({ adminId }, { isValid: false });
+      }
       throw new ApiError(401, 'Security alert: device mismatch detected. All sessions revoked.');
     }
 
@@ -904,6 +916,9 @@ const adminRefreshToken = async (req, res, next) => {
       fingerprint,
       req
     );
+
+    res.cookie('huma_admin_token', accessToken, getCookieOptions(15 * 60 * 1000));
+    res.cookie('huma_admin_refresh', newRefreshToken, getCookieOptions(7 * 24 * 60 * 60 * 1000));
 
     res.json({
       success: true,
@@ -954,13 +969,8 @@ const updateAdminCredentialsRequest = async (req, res, next) => {
       adminId: req.user._id,
       newMobileNumber,
       newSecurityQuestion,
+      newPassword, // Raw password — Mongoose pre('save') will hash this ONCE on save
     };
-
-    if (newPassword) {
-      const bcrypt = require('bcryptjs');
-      const salt = await bcrypt.genSalt(12);
-      payload.newPasswordHash = await bcrypt.hash(newPassword, salt);
-    }
 
     if (newSecurityAnswer) {
       const bcrypt = require('bcryptjs');
@@ -1042,7 +1052,9 @@ const updateAdminCredentialsVerify = async (req, res, next) => {
       admin.mobileNumber = decoded.newMobileNumber;
     }
 
-    if (decoded.newPasswordHash) {
+    if (decoded.newPassword) {
+      admin.passwordHash = decoded.newPassword; // Assigned raw, pre('save') hook will hash ONCE
+    } else if (decoded.newPasswordHash) {
       admin.passwordHash = decoded.newPasswordHash;
     }
 
@@ -1071,6 +1083,9 @@ const updateAdminCredentialsVerify = async (req, res, next) => {
    ═══════════════════════════════════════════════════ */
 
 const logout = async (req, res) => {
+  res.clearCookie('huma_token', { path: '/' });
+  res.clearCookie('huma_admin_token', { path: '/' });
+  res.clearCookie('huma_admin_refresh', { path: '/' });
   res.json({
     success: true,
     message: 'Logged out successfully.',
@@ -1087,6 +1102,101 @@ const getMe = async (req, res) => {
     success: true,
     data: { user: req.user },
   });
+};
+
+const setAdminPin = async (req, res, next) => {
+  try {
+    const { pin, currentPin } = req.body;
+    if (!pin || pin.length < 4 || pin.length > 6 || !/^\d+$/.test(pin)) {
+      throw new ApiError(400, 'PIN must be 4-6 digits.');
+    }
+    const user = await User.findById(req.user._id);
+    if (!user || user.role !== 'ADMIN') {
+      throw new ApiError(403, 'Unauthorized.');
+    }
+    if (user.securityPinHash) {
+      if (!currentPin) {
+        throw new ApiError(400, 'Current PIN is required to change PIN.');
+      }
+      const isMatch = await user.comparePin(currentPin);
+      if (!isMatch) {
+        throw new ApiError(401, 'Current PIN is incorrect.');
+      }
+    }
+    const salt = await bcrypt.genSalt(10);
+    user.securityPinHash = await bcrypt.hash(pin, salt);
+    await user.save();
+    res.json({ success: true, message: 'Security PIN updated successfully.' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const verifyAdminPin = async (req, res, next) => {
+  try {
+    const { pin } = req.body;
+    if (!pin) {
+      throw new ApiError(400, 'PIN is required.');
+    }
+    const user = await User.findById(req.user._id);
+    if (!user || user.role !== 'ADMIN') {
+      throw new ApiError(403, 'Unauthorized.');
+    }
+    if (!user.securityPinHash) {
+      throw new ApiError(400, 'Security PIN has not been set. Please set your PIN first.');
+    }
+    const isMatch = await user.comparePin(pin);
+    if (!isMatch) {
+      throw new ApiError(401, 'Incorrect PIN.');
+    }
+    res.json({ success: true, message: 'PIN verified.' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const resetAdminPin = async (req, res, next) => {
+  try {
+    const { pin, updateToken, otp } = req.body;
+    if (!pin || pin.length < 4 || pin.length > 6 || !/^\d+$/.test(pin)) {
+      throw new ApiError(400, 'New PIN must be 4-6 digits.');
+    }
+    if (!updateToken || !otp) {
+      throw new ApiError(400, 'OTP verification is required to reset PIN.');
+    }
+    // Verify the OTP using existing mechanism
+    const targetMobile = '+918960600371';
+    const otpRecord = await Otp.findOne({
+      mobileNumber: targetMobile,
+      purpose: 'ADMIN_UPDATE',
+      isUsed: false,
+      expiresAt: { $gt: new Date() },
+    }).sort({ createdAt: -1 });
+    if (!otpRecord) {
+      throw new ApiError(401, 'OTP expired or invalid. Please request a new one.');
+    }
+    if (otpRecord.attempts >= 5) {
+      throw new ApiError(429, 'Too many failed attempts. Request a new OTP.');
+    }
+    const isOtpMatch = await otpRecord.compareOtp(otp);
+    if (!isOtpMatch) {
+      otpRecord.attempts += 1;
+      await otpRecord.save();
+      throw new ApiError(401, 'Incorrect OTP.');
+    }
+    otpRecord.isUsed = true;
+    await otpRecord.save();
+    const user = await User.findById(req.user._id);
+    if (!user || user.role !== 'ADMIN') {
+      throw new ApiError(403, 'Unauthorized.');
+    }
+    const salt = await bcrypt.genSalt(10);
+    user.securityPinHash = await bcrypt.hash(pin, salt);
+    await user.save();
+    res.json({ success: true, message: 'Security PIN has been reset successfully.' });
+  } catch (error) {
+    next(error);
+  }
 };
 
 module.exports = {
@@ -1107,4 +1217,7 @@ module.exports = {
   updateAdminCredentialsVerify,
   logout,
   getMe,
+  setAdminPin,
+  verifyAdminPin,
+  resetAdminPin,
 };

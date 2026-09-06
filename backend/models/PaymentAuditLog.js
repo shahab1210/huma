@@ -19,7 +19,7 @@ const paymentAuditLogSchema = new mongoose.Schema(
     action: {
       type: String,
       required: true,
-      enum: ['SUBMIT_PROOF', 'ADMIN_CONFIRM', 'ADMIN_REJECT', 'ADMIN_EDIT_SETTINGS'],
+      enum: ['SUBMIT_PROOF', 'ADMIN_CONFIRM', 'ADMIN_REJECT', 'ADMIN_EDIT_SETTINGS', 'ADMIN_PARTIAL', 'ADMIN_REFUND'],
     },
     performedBy: {
       type: mongoose.Schema.Types.ObjectId,

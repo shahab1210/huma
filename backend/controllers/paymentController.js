@@ -6,6 +6,7 @@ const BusinessSettings = require('../models/BusinessSettings');
 const PaymentAuditLog = require('../models/PaymentAuditLog');
 const { sendBookingConfirmation, sendPaymentRejection } = require('../utils/whatsappService');
 const { ApiError } = require('../middleware/errorHandler');
+const User = require('../models/User');
 
 /**
  * Helper: Validate base64 image screenshot.
@@ -108,11 +109,23 @@ const submitProof = async (req, res, next) => {
           targetSlotId = newSlot._id;
         }
 
+        const Location = require('../models/Location');
+        let locationDoc = null;
+        if (bd.location) {
+          locationDoc = await Location.findById(bd.location);
+        }
+        if (!locationDoc && bd.serviceArea) {
+          locationDoc = await Location.findOne({ name: new RegExp(`^${bd.serviceArea}$`, 'i') });
+        }
+
         booking = new Booking({
           bookingId: bd.bookingId,
           customer: req.user._id,
           items: mappedItems,
           serviceArea: bd.serviceArea,
+          location: locationDoc ? locationDoc._id : bd.location,
+          locationName: locationDoc ? locationDoc.name : (bd.locationName || ''),
+          locationSlug: locationDoc ? locationDoc.slug : (bd.locationSlug || ''),
           address: bd.address,
           bookingDate: dateOnly,
           timeSlot: bd.timeSlot,
@@ -148,8 +161,12 @@ const submitProof = async (req, res, next) => {
     }
 
     // Check booking status
-    if (booking.paymentStatus === 'BOOKING_AMOUNT_PAID') {
+    if (booking.paymentStatus === 'BOOKING_AMOUNT_PAID' && booking.bookingStatus !== 'AWAITING_REMAINING_PAYMENT') {
       throw new ApiError(400, 'Payment has already been verified and completed.');
+    }
+
+    if (booking.bookingStatus === 'AWAITING_REMAINING_PAYMENT' && booking.remainingAmount <= 0) {
+      throw new ApiError(400, 'No remaining balance to pay.');
     }
 
     if (booking.bookingStatus === 'CANCELLED') {
@@ -201,10 +218,12 @@ const submitProof = async (req, res, next) => {
       upiId: 'demo@upi',
     };
 
-    const requiredAdvance = settings.bookingAmount;
+    const isRemaining = booking.bookingStatus === 'AWAITING_REMAINING_PAYMENT';
+    const requiredAdvance = isRemaining ? booking.remainingAmount : settings.bookingAmount;
+    const pType = isRemaining ? 'REMAINING_PAYMENT' : 'BOOKING_AMOUNT';
 
     // Find or create Payment document
-    let payment = await Payment.findOne({ booking: booking._id });
+    let payment = await Payment.findOne({ booking: booking._id, paymentType: pType });
     const previousStatus = payment ? payment.status : '';
 
     if (!payment) {
@@ -217,6 +236,7 @@ const submitProof = async (req, res, next) => {
         paymentScreenshot: paymentScreenshot || '',
         submittedAt: new Date(),
         status: 'PENDING',
+        paymentType: pType,
       });
     } else {
       payment.paymentMethod = 'UPI_MANUAL';
@@ -226,13 +246,20 @@ const submitProof = async (req, res, next) => {
       payment.paymentScreenshot = paymentScreenshot || '';
       payment.submittedAt = new Date();
       payment.status = 'PENDING';
+      payment.paymentType = pType;
     }
 
     await payment.save();
 
-    // Update Booking statuses to verification pending
+    // Update Booking statuses to verification pending and record submitted proof details
     booking.paymentStatus = 'PAYMENT_VERIFICATION_PENDING';
     booking.bookingStatus = 'PAYMENT_VERIFICATION_PENDING';
+    if (normalizedTxId) {
+      booking.transactionId = normalizedTxId;
+    }
+    if (paymentScreenshot) {
+      booking.paymentScreenshot = paymentScreenshot;
+    }
     await booking.save();
 
     // Hold the slot: ensure status is RESERVED and remove reservationExpiry so it isn't auto-released
@@ -274,33 +301,63 @@ const submitProof = async (req, res, next) => {
 const verifyManualPayment = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { adminNote } = req.body;
+    const { adminNote, pin } = req.body;
+
+    const adminUser = await User.findById(req.user._id);
+    if (!adminUser.securityPinHash) {
+      throw new ApiError(400, 'Please set your security PIN in Settings first.');
+    }
+    const pinMatch = await adminUser.comparePin(pin);
+    if (!pinMatch) {
+      throw new ApiError(403, 'Incorrect security PIN.');
+    }
 
     let payment = null;
     if (mongoose.Types.ObjectId.isValid(id)) {
       payment = await Payment.findById(id);
       if (!payment) {
-        payment = await Payment.findOne({ booking: id });
+        payment = await Payment.findOne({ booking: id }).sort({ createdAt: -1 });
       }
     }
     if (!payment) {
       const bObj = await Booking.findOne({ bookingId: id });
       if (bObj) {
-        payment = await Payment.findOne({ booking: bObj._id });
+        payment = await Payment.findOne({ booking: bObj._id }).sort({ createdAt: -1 });
       }
     }
 
-    if (!payment) {
-      throw new ApiError(404, 'Payment record not found.');
+    let booking = null;
+    if (payment) {
+      booking = await Booking.findById(payment.booking).populate('customer');
+    } else {
+      booking = await Booking.findOne({ $or: [mongoose.Types.ObjectId.isValid(id) ? { _id: id } : null, { bookingId: id }].filter(Boolean) }).populate('customer');
+      if (booking) {
+        payment = await Payment.findOne({ booking: booking._id }).sort({ createdAt: -1 });
+        if (!payment) {
+          payment = new Payment({
+            booking: booking._id,
+            amount: booking.onlineBookingAmount,
+            paymentMethod: 'UPI_MANUAL',
+            status: 'PENDING',
+          });
+        }
+      }
+    }
+
+    if (!payment || !booking) {
+      throw new ApiError(404, 'Payment or Booking record not found.');
+    }
+
+    if (booking.bookingStatus === 'CANCELLED' || booking.cancelledBy) {
+      throw new ApiError(400, 'This booking was cancelled by the customer and cannot be confirmed.');
     }
 
     if (payment.status === 'PAID' || payment.status === 'VERIFIED') {
       throw new ApiError(400, 'This payment has already been verified and approved.');
     }
 
-    const booking = await Booking.findById(payment.booking).populate('customer');
-    if (!booking) {
-      throw new ApiError(404, 'Associated booking not found.');
+    if (!booking.populated('customer')) {
+      await booking.populate('customer');
     }
 
     const previousStatus = payment.status;
@@ -313,8 +370,8 @@ const verifyManualPayment = async (req, res, next) => {
     await payment.save();
 
     // Update booking
-    booking.paidAmount = payment.amount;
-    booking.remainingAmount = Math.max(0, booking.totalAmount - payment.amount);
+    booking.paidAmount = booking.onlineBookingAmount;
+    booking.remainingAmount = 0;
     booking.paymentStatus = 'BOOKING_AMOUNT_PAID';
     booking.bookingStatus = 'CONFIRMED';
     await booking.save();
@@ -471,8 +528,185 @@ const rejectManualPayment = async (req, res, next) => {
   }
 };
 
+const verifyPartialPayment = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { verifiedAmount, adminNote } = req.body;
+
+    let payment = null;
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      payment = await Payment.findById(id);
+      if (!payment) {
+        payment = await Payment.findOne({ booking: id }).sort({ createdAt: -1 });
+      }
+    }
+    if (!payment) {
+      const bObj = await Booking.findOne({ bookingId: id });
+      if (bObj) {
+        payment = await Payment.findOne({ booking: bObj._id }).sort({ createdAt: -1 });
+      }
+    }
+
+    let booking = null;
+    if (payment) {
+      booking = await Booking.findById(payment.booking);
+    } else {
+      booking = await Booking.findOne({ $or: [mongoose.Types.ObjectId.isValid(id) ? { _id: id } : null, { bookingId: id }].filter(Boolean) });
+      if (booking) {
+        payment = await Payment.findOne({ booking: booking._id }).sort({ createdAt: -1 });
+        if (!payment) {
+          payment = new Payment({
+            booking: booking._id,
+            amount: 0,
+            paymentMethod: 'UPI_MANUAL',
+            status: 'PENDING',
+          });
+        }
+      }
+    }
+
+    if (!payment || !booking) {
+      throw new ApiError(404, 'Payment or Booking record not found.');
+    }
+    if (booking.bookingStatus === 'CANCELLED' || booking.cancelledBy) {
+      throw new ApiError(400, 'This booking was cancelled by the customer and cannot be confirmed.');
+    }
+    // Validate amount
+    const amount = Number(verifiedAmount);
+    if (!amount || amount <= 0) {
+      throw new ApiError(400, 'Verified amount must be greater than zero.');
+    }
+    if (amount > booking.onlineBookingAmount) {
+      throw new ApiError(400, 'Verified amount cannot exceed the required booking amount.');
+    }
+    // Calculate new totals
+    const newPaidAmount = (booking.paidAmount || 0) + amount;
+    const newRemainingAmount = Math.max(0, booking.onlineBookingAmount - newPaidAmount);
+    // Prevent duplicate: check if this specific payment was already verified
+    if (payment.status === 'PAID' || payment.status === 'PARTIAL' || payment.status === 'VERIFIED') {
+      throw new ApiError(400, 'This payment has already been processed.');
+    }
+    // Update payment
+    payment.status = newRemainingAmount <= 0 ? 'PAID' : 'PARTIAL';
+    payment.amount = amount;
+    payment.verifiedAt = new Date();
+    payment.verifiedBy = req.user._id;
+    payment.adminNote = adminNote || '';
+    await payment.save();
+    // Update booking
+    booking.paidAmount = newPaidAmount;
+    booking.remainingAmount = newRemainingAmount;
+    if (newRemainingAmount <= 0) {
+      booking.paymentStatus = 'BOOKING_AMOUNT_PAID';
+      booking.bookingStatus = 'CONFIRMED';
+      // Lock timeslot
+      if (booking.timeSlotId) {
+        const TimeSlot = require('../models/TimeSlot');
+        await TimeSlot.findByIdAndUpdate(booking.timeSlotId, { status: 'BOOKED', reservationExpiry: null });
+      }
+    } else {
+      booking.paymentStatus = 'PARTIAL_PAYMENT';
+      booking.bookingStatus = 'AWAITING_REMAINING_PAYMENT';
+    }
+    await booking.save();
+    // Audit log
+    const PaymentAuditLog = require('../models/PaymentAuditLog');
+    await PaymentAuditLog.create({
+      payment: payment._id,
+      booking: booking._id,
+      action: 'ADMIN_PARTIAL',
+      performedBy: req.user._id,
+      previousStatus: 'PENDING',
+      newStatus: payment.status,
+      note: adminNote || `Partial payment of ₹${amount} verified. Remaining: ₹${newRemainingAmount}`,
+    });
+    res.json({
+      success: true,
+      message: newRemainingAmount <= 0
+        ? 'Payment fully verified. Order confirmed.'
+        : `Partial payment of ₹${amount} verified. Remaining: ₹${newRemainingAmount}`,
+      data: {
+        payment,
+        booking: {
+          paidAmount: booking.paidAmount,
+          remainingAmount: booking.remainingAmount,
+          paymentStatus: booking.paymentStatus,
+          bookingStatus: booking.bookingStatus,
+        },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const processRefund = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { refundAmount, adminRefundNote, refundTransactionId, pin } = req.body;
+
+    const adminUser = await User.findById(req.user._id);
+    if (!adminUser.securityPinHash) {
+      throw new ApiError(400, 'Please set your security PIN in Settings first.');
+    }
+    const pinMatch = await adminUser.comparePin(pin);
+    if (!pinMatch) {
+      throw new ApiError(403, 'Incorrect security PIN.');
+    }
+
+    const booking = await Booking.findOne({
+      $or: [mongoose.Types.ObjectId.isValid(id) ? { _id: id } : null, { bookingId: id }].filter(Boolean),
+    }).populate('customer');
+
+    if (!booking) {
+      throw new ApiError(404, 'Booking not found.');
+    }
+
+    const amount = Number(refundAmount);
+    if (isNaN(amount) || amount < 0) {
+      throw new ApiError(400, 'Please enter a valid refund amount.');
+    }
+
+    booking.refundAmount = amount;
+    booking.adminRefundNote = adminRefundNote || '';
+    booking.refundTransactionId = refundTransactionId || '';
+    booking.refundStatus = 'PROCESSED';
+    booking.paymentStatus = 'REFUNDED';
+    booking.bookingStatus = 'CANCELLED';
+    booking.refundProcessedAt = new Date();
+    await booking.save();
+
+    let payment = await Payment.findOne({ booking: booking._id }).sort({ createdAt: -1 });
+    if (payment) {
+      payment.status = 'REFUNDED';
+      payment.adminNote = adminRefundNote || payment.adminNote;
+      await payment.save();
+
+      await PaymentAuditLog.create({
+        payment: payment._id,
+        booking: booking._id,
+        action: 'ADMIN_REFUND',
+        performedBy: req.user._id,
+        previousStatus: payment.status,
+        newStatus: 'REFUNDED',
+        note: `Refund of ₹${amount} processed. ${adminRefundNote ? `Note: ${adminRefundNote}` : ''}`,
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `Refund of ₹${amount} processed successfully for booking ${booking.bookingId}`,
+      data: { booking },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   submitProof,
   verifyManualPayment,
   rejectManualPayment,
+  verifyPartialPayment,
+  processRefund,
 };

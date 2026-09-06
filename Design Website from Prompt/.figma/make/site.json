@@ -1,7 +1,8 @@
 {
-  "description": "Create stunning websites effortlessly with customizable templates and user-friendly design tools, perfect for beginners and professionals alike.",
+  "title": "Huma Mehendi | Professional Mehendi Artist in Lucknow, Raebareli & UP",
+  "description": "Professional mehendi artist offering bridal mehendi, Arabic henna designs, makeup & beauty services in Lucknow, Kanpur, Raebareli and across Uttar Pradesh. 10+ years experience, 500+ happy clients.",
   "robots": {
-    "index": false
+    "index": true
   },
   "accessibility": {
     "addBypassLinks": false,

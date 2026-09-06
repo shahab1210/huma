@@ -1,4 +1,5 @@
 import { useState } from "react";
+import SEOHead from "../components/SEOHead";
 
 export default function Faq() {
   const [openIndex, setOpenIndex] = useState<number | null>(0);
@@ -34,8 +35,27 @@ export default function Faq() {
     }
   ];
 
+  const faqSchema = {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: FAQS.map((faq) => ({
+      '@type': 'Question',
+      name: faq.q,
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: faq.a,
+      },
+    })),
+  };
+
   return (
     <div className="mx-auto max-w-3xl px-5 py-24 lg:px-8">
+      <SEOHead
+        title="Frequently Asked Questions | Huma Mehendi & Beauty Artist"
+        description="Find answers to common questions about booking bridal mehendi, travel fees in Lucknow & Raebareli, organic henna quality, and makeup products used by Huma Mehendi."
+        canonicalUrl="https://humamehendi.in/faq"
+        structuredData={faqSchema}
+      />
       {/* Title */}
       <div className="mb-12 text-center">
         <p className="flex items-center justify-center gap-3 text-[11px] font-medium uppercase tracking-[0.28em] text-gold">

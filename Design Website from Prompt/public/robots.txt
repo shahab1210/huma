@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /auth
+Disallow: /dashboard
+Disallow: /cart
+Disallow: /booking
+
+Sitemap: https://humamehendi.in/sitemap.xml

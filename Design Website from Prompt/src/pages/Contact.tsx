@@ -1,4 +1,6 @@
 import { useApp } from "../context/AppContext";
+import { PhoneIcon, ChatIcon, CameraIcon, MailIcon } from "../components/icons";
+import SEOHead from "../components/SEOHead";
 
 export default function Contact() {
   const { serviceAreas } = useApp();
@@ -14,7 +16,7 @@ export default function Contact() {
       desc: "Call for quick enquiries and urgent slot availability.",
       href: `tel:${phone}`,
       btnText: "Call Now",
-      icon: "📞"
+      icon: PhoneIcon
     },
     {
       label: "WhatsApp Chat",
@@ -22,7 +24,7 @@ export default function Contact() {
       desc: "Share your custom designs or makeup inspirations.",
       href: `https://wa.me/${whatsapp}`,
       btnText: "Chat on WhatsApp",
-      icon: "💬"
+      icon: ChatIcon
     },
     {
       label: "Instagram Portfolio",
@@ -30,7 +32,7 @@ export default function Contact() {
       desc: "Browse our latest real-bride designs and videos.",
       href: `https://instagram.com/${instagram}`,
       btnText: "Follow Us",
-      icon: "📸"
+      icon: CameraIcon
     },
     {
       label: "Email Enquiries",
@@ -38,12 +40,17 @@ export default function Contact() {
       desc: "Send us a message for business or long-term packages.",
       href: `mailto:${email}`,
       btnText: "Email Us",
-      icon: "✉"
+      icon: MailIcon
     }
   ];
 
   return (
     <div className="mx-auto max-w-4xl px-5 py-24 lg:px-8">
+      <SEOHead
+        title="Contact Huma Mehendi | Book Mehendi Artist in Lucknow & UP"
+        description="Get in touch with Huma Mehendi for bridal mehendi, Arabic henna, makeup & beauty bookings in Lucknow, Raebareli, Kanpur, Sandila & Fatehpur. Call +91 8960600371."
+        canonicalUrl="https://humamehendi.in/contact"
+      />
       {/* Title */}
       <div className="mb-12 text-center">
         <p className="flex items-center justify-center gap-3 text-[11px] font-medium uppercase tracking-[0.28em] text-gold">
@@ -64,8 +71,8 @@ export default function Contact() {
             className="rounded-2xl border border-hairline bg-surface p-6 flex flex-col justify-between hover:border-gold transition-colors"
           >
             <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xl">{c.icon}</span>
+              <div className="flex items-center gap-2.5">
+                <c.icon size={22} className="text-gold" />
                 <h3 className="font-display text-lg text-brand font-semibold">{c.label}</h3>
               </div>
               <p className="mt-1 text-md font-bold text-brand">{c.value}</p>

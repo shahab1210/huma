@@ -30,6 +30,17 @@ export default function AdminDashboard() {
     updateBusinessSettings,
     adminConfirmPayment,
     adminRejectPayment,
+    adminPartialPayment,
+    adminProcessRefund,
+    setAdminPin,
+    verifyAdminPin,
+    locations,
+    serviceGroups,
+    categories,
+    fetchLocations,
+    fetchServiceGroups,
+    fetchCategories,
+    fetchCatalog,
   } = useApp();
 
   // Admin Login Credentials & Security Question
@@ -51,7 +62,7 @@ export default function AdminDashboard() {
   const [isSubmittingCreds, setIsSubmittingCreds] = useState(false);
 
   // Tab control
-  const [activeTab, setActiveTab] = useState<"overview" | "bookings" | "slots" | "catalog" | "reviews" | "areas" | "payments" | "settings">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "bookings" | "slots" | "catalog" | "reviews" | "areas" | "payments" | "settings" | "locations" | "servicegroups">("overview");
 
   // Slot management forms
   const [blockDateInput, setBlockDateInput] = useState("");
@@ -65,24 +76,60 @@ export default function AdminDashboard() {
   const [crudCategory, setCrudCategory] = useState("");
   const [crudDesc, setCrudDesc] = useState("");
   const [crudPrice, setCrudPrice] = useState<number>(1000);
+  const [crudMrp, setCrudMrp] = useState<number>(1000);
+  const [crudDiscountType, setCrudDiscountType] = useState<"NONE" | "PERCENTAGE" | "FIXED">("NONE");
+  const [crudDiscountValue, setCrudDiscountValue] = useState<number>(0);
   const [crudDuration, setCrudDuration] = useState("Approx. 1.5 hrs");
   const [crudType, setCrudType] = useState<Service["type"]>("MEHENDI");
   const [crudFeatured, setCrudFeatured] = useState(false);
   const [crudAvailability, setCrudAvailability] = useState<Service["availability"]>("AVAILABLE");
   const [crudImage, setCrudImage] = useState("");
 
+  // Locations CRUD states
+  const [editingLocation, setEditingLocation] = useState<any>(null);
+  const [isAddingLocation, setIsAddingLocation] = useState(false);
+  const [locName, setLocName] = useState("");
+  const [locSlug, setLocSlug] = useState("");
+  const [locShortDesc, setLocShortDesc] = useState("");
+  const [locDesc, setLocDesc] = useState("");
+  const [locHeroImage, setLocHeroImage] = useState("");
+  const [locSeoTitle, setLocSeoTitle] = useState("");
+  const [locSeoDesc, setLocSeoDesc] = useState("");
+  const [locNearbyAreas, setLocNearbyAreas] = useState("");
+  const [locGroups, setLocGroups] = useState<string[]>([]);
+  const [locActive, setLocActive] = useState(true);
+
+  // Service Groups CRUD states
+  const [editingGroup, setEditingGroup] = useState<any>(null);
+  const [isAddingGroup, setIsAddingGroup] = useState(false);
+  const [groupName, setGroupName] = useState("");
+  const [groupSlug, setGroupSlug] = useState("");
+  const [groupParentType, setGroupParentType] = useState<"MEHENDI" | "MAKEUP" | "PARLOUR">("MEHENDI");
+  const [groupShortDesc, setGroupShortDesc] = useState("");
+  const [groupDesc, setGroupDesc] = useState("");
+  const [groupHeroImage, setGroupHeroImage] = useState("");
+  const [groupSeoTitle, setGroupSeoTitle] = useState("");
+  const [groupSeoDesc, setGroupSeoDesc] = useState("");
+  const [groupActive, setGroupActive] = useState(true);
+  const [groupFeatured, setGroupFeatured] = useState(false);
+
   // Service Area Form
   const [newAreaInput, setNewAreaInput] = useState("");
 
   // Payment Verification Tab States
-  const [paymentFilter, setPaymentFilter] = useState<"PENDING" | "PAID" | "REJECTED" | "ALL">("PENDING");
+  const [paymentFilter, setPaymentFilter] = useState<"PENDING" | "PAID" | "REJECTED" | "CANCELLED" | "ALL">("PENDING");
   const [selectedScreenshot, setSelectedScreenshot] = useState<string | null>(null);
 
   // Dialog / Modal states for action details
   const [activeDialogBooking, setActiveDialogBooking] = useState<Booking | null>(null);
-  const [dialogAction, setDialogAction] = useState<"APPROVE" | "REJECT" | null>(null);
+  const [dialogAction, setDialogAction] = useState<"APPROVE" | "REJECT" | "PARTIAL" | "REFUND" | null>(null);
   const [dialogReason, setDialogReason] = useState("");
   const [dialogNote, setDialogNote] = useState("");
+  const [confirmStep, setConfirmStep] = useState<1 | 2>(1);
+  const [adminPinInput, setAdminPinInput] = useState("");
+  const [partialAmountInput, setPartialAmountInput] = useState<number>(1500);
+  const [refundAmountInput, setRefundAmountInput] = useState<number>(0);
+  const [refundTxInput, setRefundTxInput] = useState("");
   const [isProcessingAction, setIsProcessingAction] = useState(false);
 
   // Settings Tab States
@@ -93,6 +140,12 @@ export default function AdminDashboard() {
   const [settingsWhatsApp, setSettingsWhatsApp] = useState("+918960600371");
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const settingsQrInputRef = useRef<HTMLInputElement>(null);
+
+  // Security PIN Settings state
+  const [pinCurrent, setPinCurrent] = useState("");
+  const [pinNew, setPinNew] = useState("");
+  const [pinConfirm, setPinConfirm] = useState("");
+  const [isSavingPin, setIsSavingPin] = useState(false);
 
   // Sync settings when loaded
   useEffect(() => {
@@ -169,21 +222,20 @@ export default function AdminDashboard() {
 
   const getFilteredBookings = () => {
     return bookings.filter((b) => {
-      if (paymentFilter === "ALL") {
-        return (
-          b.paymentStatus === "PAYMENT_VERIFICATION_PENDING" ||
-          b.paymentStatus === "BOOKED_AMOUNT_PAID" ||
-          b.paymentStatus === "REJECTED"
-        );
-      }
       if (paymentFilter === "PENDING") {
-        return b.paymentStatus === "PAYMENT_VERIFICATION_PENDING";
+        return b.bookingStatus !== "CANCELLED" && b.paymentStatus === "PAYMENT_VERIFICATION_PENDING";
       }
       if (paymentFilter === "PAID") {
-        return b.paymentStatus === "BOOKED_AMOUNT_PAID";
+        return b.bookingStatus !== "CANCELLED" && (b.paymentStatus === "BOOKED_AMOUNT_PAID" || b.paymentStatus === "PARTIAL_PAYMENT");
       }
       if (paymentFilter === "REJECTED") {
-        return b.paymentStatus === "REJECTED";
+        return b.bookingStatus !== "CANCELLED" && b.paymentStatus === "REJECTED";
+      }
+      if (paymentFilter === "CANCELLED") {
+        return b.bookingStatus === "CANCELLED" || b.refundStatus === "PENDING" || b.refundStatus === "PROCESSED";
+      }
+      if (paymentFilter === "ALL") {
+        return true;
       }
       return false;
     });
@@ -192,6 +244,15 @@ export default function AdminDashboard() {
   const triggerApproveDialog = (booking: Booking) => {
     setActiveDialogBooking(booking);
     setDialogAction("APPROVE");
+    setConfirmStep(1);
+    setAdminPinInput("");
+    setDialogNote("");
+  };
+
+  const triggerPartialDialog = (booking: Booking) => {
+    setActiveDialogBooking(booking);
+    setDialogAction("PARTIAL");
+    setPartialAmountInput(booking.remainingAmount || booking.onlineBookingAmount || 1500);
     setDialogNote("");
   };
 
@@ -202,21 +263,76 @@ export default function AdminDashboard() {
     setDialogNote("");
   };
 
+  const triggerRefundDialog = (booking: Booking) => {
+    const paid = booking.paidAmount || booking.onlineBookingAmount || 0;
+    const suggestedRefund = Math.max(0, paid - 500);
+    setActiveDialogBooking(booking);
+    setDialogAction("REFUND");
+    setConfirmStep(1);
+    setAdminPinInput("");
+    setRefundAmountInput(suggestedRefund);
+    setDialogNote("");
+    setRefundTxInput("");
+  };
+
   const handleDialogSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeDialogBooking) return;
 
+    // For Approve or Refund action: Step 1 moves to Step 2 (PIN entry)
+    if ((dialogAction === "APPROVE" || dialogAction === "REFUND") && confirmStep === 1) {
+      setConfirmStep(2);
+      return;
+    }
+
     setIsProcessingAction(true);
     try {
-      const targetId = activeDialogBooking._id || activeDialogBooking.bookingId;
+      const targetId = (activeDialogBooking as any)._id || activeDialogBooking.bookingId;
       if (dialogAction === "APPROVE") {
-        const res = await adminConfirmPayment(targetId, dialogNote);
+        if (!adminPinInput || adminPinInput.length < 4) {
+          showToast("Please enter your 4–6 digit Admin Security PIN", "warning");
+          setIsProcessingAction(false);
+          return;
+        }
+        const res = await adminConfirmPayment(targetId, dialogNote, adminPinInput);
         if (res.success) {
-          showToast(`Successfully confirmed payment for booking ${activeDialogBooking.bookingId}`);
+          showToast(`Successfully confirmed order & payment for booking ${activeDialogBooking.bookingId}`);
+          setActiveDialogBooking(null);
+          setDialogAction(null);
+          setConfirmStep(1);
+          setAdminPinInput("");
+        } else {
+          showToast(res.message || "Failed to confirm payment", "error");
+        }
+      } else if (dialogAction === "PARTIAL") {
+        if (!partialAmountInput || partialAmountInput <= 0) {
+          showToast("Please enter a valid partial payment amount", "warning");
+          setIsProcessingAction(false);
+          return;
+        }
+        const res = await adminPartialPayment(targetId, partialAmountInput, dialogNote);
+        if (res.success) {
+          showToast(res.message || `Recorded partial payment for booking ${activeDialogBooking.bookingId}`);
           setActiveDialogBooking(null);
           setDialogAction(null);
         } else {
-          showToast(res.message || "Failed to confirm payment", "error");
+          showToast(res.message || "Failed to process partial payment", "error");
+        }
+      } else if (dialogAction === "REFUND") {
+        if (!adminPinInput || adminPinInput.length < 4) {
+          showToast("Please enter your 4–6 digit Admin Security PIN", "warning");
+          setIsProcessingAction(false);
+          return;
+        }
+        const res = await adminProcessRefund(targetId, refundAmountInput, dialogNote, refundTxInput, adminPinInput);
+        if (res.success) {
+          showToast(res.message || `Processed refund for booking ${activeDialogBooking.bookingId}`);
+          setActiveDialogBooking(null);
+          setDialogAction(null);
+          setConfirmStep(1);
+          setAdminPinInput("");
+        } else {
+          showToast(res.message || "Failed to process refund", "error");
         }
       } else {
         const res = await adminRejectPayment(targetId, dialogReason, dialogNote);
@@ -232,6 +348,35 @@ export default function AdminDashboard() {
       showToast("Network error occurred", "error");
     } finally {
       setIsProcessingAction(false);
+    }
+  };
+
+  const handlePinSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pinNew || pinNew.length < 4 || pinNew.length > 6 || !/^\d+$/.test(pinNew)) {
+      showToast("PIN must be 4–6 numeric digits", "warning");
+      return;
+    }
+    if (pinNew !== pinConfirm) {
+      showToast("PIN confirmation does not match", "warning");
+      return;
+    }
+
+    setIsSavingPin(true);
+    try {
+      const res = await setAdminPin(pinNew, pinCurrent);
+      if (res.success) {
+        showToast("Security PIN updated successfully!");
+        setPinCurrent("");
+        setPinNew("");
+        setPinConfirm("");
+      } else {
+        showToast(res.message || "Failed to set PIN", "error");
+      }
+    } catch {
+      showToast("Failed to connect to server", "error");
+    } finally {
+      setIsSavingPin(false);
     }
   };
 
@@ -276,6 +421,9 @@ export default function AdminDashboard() {
     setCrudCategory(type === "MEHENDI" ? "Bridal" : type === "MAKEUP" ? "Bridal" : "Skin");
     setCrudDesc("");
     setCrudPrice(1500);
+    setCrudMrp(1500);
+    setCrudDiscountType("NONE");
+    setCrudDiscountValue(0);
     setCrudDuration("Approx. 1.5 hrs");
     setCrudFeatured(false);
     setCrudAvailability("AVAILABLE");
@@ -290,6 +438,9 @@ export default function AdminDashboard() {
     setCrudCategory(item.category);
     setCrudDesc(item.description);
     setCrudPrice(item.startingPrice);
+    setCrudMrp(item.mrp || item.startingPrice);
+    setCrudDiscountType(item.discountType || "NONE");
+    setCrudDiscountValue(item.discountValue || 0);
     setCrudDuration(item.duration);
     setCrudFeatured(!!item.featured);
     setCrudAvailability(item.availability);
@@ -300,13 +451,25 @@ export default function AdminDashboard() {
   const handleSaveCatalogItem = (e: React.FormEvent) => {
     e.preventDefault();
     const id = editingItem ? editingItem.id : `custom-${Math.random().toString(36).substr(2, 9)}`;
-    const savedItem: Service = {
+    
+    // Auto-calculate final selling price
+    let finalPrice = Number(crudMrp);
+    if (crudDiscountType === "PERCENTAGE") {
+      finalPrice = Math.round(crudMrp * (1 - crudDiscountValue / 100));
+    } else if (crudDiscountType === "FIXED") {
+      finalPrice = Math.max(0, crudMrp - crudDiscountValue);
+    }
+
+    const savedItem: any = {
       id,
       type: crudType,
       name: crudName,
       category: crudCategory,
       description: crudDesc,
-      startingPrice: Number(crudPrice),
+      startingPrice: finalPrice,
+      mrp: Number(crudMrp),
+      discountType: crudDiscountType,
+      discountValue: Number(crudDiscountValue),
       duration: crudDuration,
       featured: crudFeatured,
       availability: crudAvailability,
@@ -322,6 +485,200 @@ export default function AdminDashboard() {
     if (!newAreaInput.trim()) return;
     addServiceArea(newAreaInput.trim());
     setNewAreaInput("");
+  };
+
+  const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+
+  const handleOpenAddLocation = () => {
+    setEditingLocation(null);
+    setLocName("");
+    setLocSlug("");
+    setLocShortDesc("");
+    setLocDesc("");
+    setLocHeroImage("");
+    setLocSeoTitle("");
+    setLocSeoDesc("");
+    setLocNearbyAreas("");
+    setLocGroups([]);
+    setLocActive(true);
+    setIsAddingLocation(true);
+  };
+
+  const handleOpenEditLocation = (loc: any) => {
+    setEditingLocation(loc);
+    setLocName(loc.name);
+    setLocSlug(loc.slug);
+    setLocShortDesc(loc.shortDescription || "");
+    setLocDesc(loc.description || "");
+    setLocHeroImage(loc.heroImage || "");
+    setLocSeoTitle(loc.seoTitle || "");
+    setLocSeoDesc(loc.seoDescription || "");
+    setLocNearbyAreas((loc.nearbyAreas || []).join(", "));
+    setLocGroups((loc.availableServiceGroups || []).map((g: any) => g._id || g));
+    setLocActive(!!loc.isActive);
+    setIsAddingLocation(true);
+  };
+
+  const handleSaveLocation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const token = localStorage.getItem("huma_admin_token");
+      const url = editingLocation 
+        ? `${BASE_URL}/admin/locations/${editingLocation._id}`
+        : `${BASE_URL}/admin/locations`;
+      
+      const payload = {
+        name: locName,
+        slug: locSlug,
+        shortDescription: locShortDesc,
+        description: locDesc,
+        heroImage: locHeroImage,
+        seoTitle: locSeoTitle,
+        seoDescription: locSeoDesc,
+        nearbyAreas: locNearbyAreas.split(",").map(s => s.trim()).filter(Boolean),
+        availableServiceGroups: locGroups,
+        isActive: locActive,
+      };
+
+      const res = await fetch(url, {
+        method: editingLocation ? "PUT" : "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        showToast(`Location "${locName}" saved successfully.`);
+        fetchLocations();
+        setIsAddingLocation(false);
+        setEditingLocation(null);
+      } else {
+        showToast(data.message || "Failed to save location.", "error");
+      }
+    } catch {
+      showToast("Error connecting to server", "error");
+    }
+  };
+
+  const handleDeleteLocation = async (id: string) => {
+    if (!confirm("Are you sure you want to deactivate this location?")) return;
+    try {
+      const token = localStorage.getItem("huma_admin_token");
+      const res = await fetch(`${BASE_URL}/admin/locations/${id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast("Location deactivated.");
+        fetchLocations();
+      } else {
+        showToast(data.message || "Failed to delete.", "error");
+      }
+    } catch {
+      showToast("Error connecting to server", "error");
+    }
+  };
+
+  const handleOpenAddGroup = () => {
+    setEditingGroup(null);
+    setGroupName("");
+    setGroupSlug("");
+    setGroupParentType("MEHENDI");
+    setGroupShortDesc("");
+    setGroupDesc("");
+    setGroupHeroImage("");
+    setGroupSeoTitle("");
+    setGroupSeoDesc("");
+    setGroupActive(true);
+    setGroupFeatured(false);
+    setIsAddingGroup(true);
+  };
+
+  const handleOpenEditGroup = (g: any) => {
+    setEditingGroup(g);
+    setGroupName(g.name);
+    setGroupSlug(g.slug);
+    setGroupParentType(g.parentType);
+    setGroupShortDesc(g.shortDescription || "");
+    setGroupDesc(g.description || "");
+    setGroupHeroImage(g.heroImage || "");
+    setGroupSeoTitle(g.seoTitle || "");
+    setGroupSeoDesc(g.seoDescription || "");
+    setGroupActive(!!g.isActive);
+    setGroupFeatured(!!g.isFeatured);
+    setIsAddingGroup(true);
+  };
+
+  const handleSaveGroup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const token = localStorage.getItem("huma_admin_token");
+      const url = editingGroup 
+        ? `${BASE_URL}/admin/service-groups/${editingGroup._id}`
+        : `${BASE_URL}/admin/service-groups`;
+      
+      const payload = {
+        name: groupName,
+        slug: groupSlug,
+        parentType: groupParentType,
+        shortDescription: groupShortDesc,
+        description: groupDesc,
+        heroImage: groupHeroImage,
+        seoTitle: groupSeoTitle,
+        seoDescription: groupSeoDesc,
+        isActive: groupActive,
+        isFeatured: groupFeatured,
+      };
+
+      const res = await fetch(url, {
+        method: editingGroup ? "PUT" : "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        showToast(`Service group "${groupName}" saved successfully.`);
+        fetchServiceGroups();
+        setIsAddingGroup(false);
+        setEditingGroup(null);
+      } else {
+        showToast(data.message || "Failed to save group.", "error");
+      }
+    } catch {
+      showToast("Error connecting to server", "error");
+    }
+  };
+
+  const handleDeleteGroup = async (id: string) => {
+    if (!confirm("Deactivate this service group?")) return;
+    try {
+      const token = localStorage.getItem("huma_admin_token");
+      const res = await fetch(`${BASE_URL}/admin/service-groups/${id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast("Group deactivated.");
+        fetchServiceGroups();
+      } else {
+        showToast(data.message || "Failed to delete.", "error");
+      }
+    } catch {
+      showToast("Error connecting to server", "error");
+    }
   };
 
   // Auth Guard: Admin login page
@@ -463,6 +820,8 @@ export default function AdminDashboard() {
           { key: "payments", label: `Payments (${bookings.filter((b) => b.paymentStatus === "PAYMENT_VERIFICATION_PENDING").length})` },
           { key: "slots", label: "Slots / Calendar" },
           { key: "catalog", label: "Catalog Editor" },
+          { key: "locations", label: `Locations (${locations.length})` },
+          { key: "servicegroups", label: `Service Groups (${serviceGroups.length})` },
           { key: "reviews", label: `Reviews (${reviews.length})` },
           { key: "areas", label: "Service Areas" },
           { key: "settings", label: "Settings" },
@@ -816,28 +1175,79 @@ export default function AdminDashboard() {
 
                   <div>
                     <label htmlFor="crud-cat" className="block text-[11px] font-semibold text-gold uppercase tracking-wider">Category</label>
-                    <input
+                    <select
                       id="crud-cat"
-                      type="text"
                       required
-                      placeholder="e.g. Bridal, Occasion, Skin, Hair"
                       value={crudCategory}
                       onChange={(e) => setCrudCategory(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-hairline bg-cream/30 px-3 py-2 text-sm focus:outline-none"
+                    >
+                      <option value="">-- Select Category --</option>
+                      {categories.filter(c => c.serviceType === crudType).map((c) => (
+                        <option key={c._id} value={c._id || c.name}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label htmlFor="crud-mrp" className="block text-[11px] font-semibold text-gold uppercase tracking-wider">MRP (₹)</label>
+                    <input
+                      id="crud-mrp"
+                      type="number"
+                      required
+                      min={100}
+                      value={crudMrp}
+                      onChange={(e) => setCrudMrp(parseInt(e.target.value) || 0)}
                       className="mt-1 w-full rounded-lg border border-hairline bg-cream/30 px-3 py-2 text-sm focus:outline-none"
                     />
                   </div>
 
                   <div>
-                    <label htmlFor="crud-price" className="block text-[11px] font-semibold text-gold uppercase tracking-wider">Starting Price (₹)</label>
-                    <input
-                      id="crud-price"
-                      type="number"
-                      required
-                      min={100}
-                      value={crudPrice}
-                      onChange={(e) => setCrudPrice(parseInt(e.target.value))}
+                    <label htmlFor="crud-discount-type" className="block text-[11px] font-semibold text-gold uppercase tracking-wider">Discount Type</label>
+                    <select
+                      id="crud-discount-type"
+                      value={crudDiscountType}
+                      onChange={(e) => setCrudDiscountType(e.target.value as any)}
                       className="mt-1 w-full rounded-lg border border-hairline bg-cream/30 px-3 py-2 text-sm focus:outline-none"
-                    />
+                    >
+                      <option value="NONE">No Discount</option>
+                      <option value="PERCENTAGE">Percentage (%)</option>
+                      <option value="FIXED">Fixed Amount (₹)</option>
+                    </select>
+                  </div>
+
+                  {crudDiscountType !== "NONE" && (
+                    <div>
+                      <label htmlFor="crud-discount-value" className="block text-[11px] font-semibold text-gold uppercase tracking-wider">
+                        Discount Value {crudDiscountType === "PERCENTAGE" ? "(%)" : "(₹)"}
+                      </label>
+                      <input
+                        id="crud-discount-value"
+                        type="number"
+                        min={0}
+                        max={crudDiscountType === "PERCENTAGE" ? 100 : crudMrp}
+                        value={crudDiscountValue}
+                        onChange={(e) => setCrudDiscountValue(parseInt(e.target.value) || 0)}
+                        className="mt-1 w-full rounded-lg border border-hairline bg-cream/30 px-3 py-2 text-sm focus:outline-none"
+                      />
+                    </div>
+                  )}
+
+                  <div>
+                    <span className="block text-[11px] font-semibold text-gold uppercase tracking-wider">Final Selling Price (Auto)</span>
+                    <div className="mt-2 text-md font-bold text-brand">
+                      ₹{(() => {
+                        let final = Number(crudMrp);
+                        if (crudDiscountType === "PERCENTAGE") {
+                          final = Math.round(crudMrp * (1 - crudDiscountValue / 100));
+                        } else if (crudDiscountType === "FIXED") {
+                          final = Math.max(0, crudMrp - crudDiscountValue);
+                        }
+                        return final.toLocaleString("en-IN");
+                      })()}
+                    </div>
                   </div>
 
                   <div>
@@ -949,12 +1359,379 @@ export default function AdminDashboard() {
                         type="button"
                         onClick={() => {
                           if (confirm(`Delete service "${item.name}" from catalog?`)) {
-                            deleteService(item.id);
+                            deleteService(item.id, item.type);
                           }
                         }}
                         className="rounded border border-blocked/25 px-2 py-1 text-[10px] font-medium text-blocked hover:bg-blocked/5 transition-colors"
                       >
                         Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* LOCATIONS MANAGER */}
+        {activeTab === "locations" && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between border-b border-hairline pb-2">
+              <h2 className="font-display text-2xl text-brand">Locations CMS</h2>
+              {!isAddingLocation && (
+                <button
+                  type="button"
+                  onClick={handleOpenAddLocation}
+                  className="rounded bg-brand px-3 py-1.5 text-xs font-semibold text-cream"
+                >
+                  + Add Location
+                </button>
+              )}
+            </div>
+
+            {isAddingLocation ? (
+              <form onSubmit={handleSaveLocation} className="rounded-2xl border border-hairline bg-surface p-6 space-y-6 max-w-xl">
+                <h3 className="font-display text-lg text-brand border-b border-hairline pb-2 font-semibold">
+                  {editingLocation ? `Edit Location: ${editingLocation.name}` : "Add New Location"}
+                </h3>
+                <div className="grid gap-4 sm:grid-cols-2 text-sm">
+                  <div>
+                    <label htmlFor="loc-name" className="block text-[11px] font-semibold text-gold uppercase tracking-wider">City Name</label>
+                    <input
+                      id="loc-name"
+                      type="text"
+                      required
+                      placeholder="e.g. Lucknow"
+                      value={locName}
+                      onChange={(e) => setLocName(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-hairline bg-cream/30 px-3 py-2 text-sm focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="loc-slug" className="block text-[11px] font-semibold text-gold uppercase tracking-wider">URL Slug</label>
+                    <input
+                      id="loc-slug"
+                      type="text"
+                      placeholder="e.g. lucknow (auto-generated if empty)"
+                      value={locSlug}
+                      onChange={(e) => setLocSlug(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-hairline bg-cream/30 px-3 py-2 text-sm focus:outline-none"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label htmlFor="loc-sdesc" className="block text-[11px] font-semibold text-gold uppercase tracking-wider">Short Description</label>
+                    <input
+                      id="loc-sdesc"
+                      type="text"
+                      placeholder="e.g. Premium mehendi & beauty services in Lucknow"
+                      value={locShortDesc}
+                      onChange={(e) => setLocShortDesc(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-hairline bg-cream/30 px-3 py-2 text-sm focus:outline-none"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label htmlFor="loc-desc" className="block text-[11px] font-semibold text-gold uppercase tracking-wider">Body Description</label>
+                    <textarea
+                      id="loc-desc"
+                      rows={4}
+                      placeholder="Rich content about services, landmarks, travel..."
+                      value={locDesc}
+                      onChange={(e) => setLocDesc(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-hairline bg-cream/30 px-3 py-2 text-sm focus:outline-none"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label htmlFor="loc-hero" className="block text-[11px] font-semibold text-gold uppercase tracking-wider">Hero Image URL</label>
+                    <input
+                      id="loc-hero"
+                      type="url"
+                      placeholder="Hero banner image link"
+                      value={locHeroImage}
+                      onChange={(e) => setLocHeroImage(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-hairline bg-cream/30 px-3 py-2 text-sm focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="loc-seot" className="block text-[11px] font-semibold text-gold uppercase tracking-wider">SEO Title</label>
+                    <input
+                      id="loc-seot"
+                      type="text"
+                      placeholder="Custom <title> tag"
+                      value={locSeoTitle}
+                      onChange={(e) => setLocSeoTitle(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-hairline bg-cream/30 px-3 py-2 text-sm focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="loc-seod" className="block text-[11px] font-semibold text-gold uppercase tracking-wider">SEO Description</label>
+                    <input
+                      id="loc-seod"
+                      type="text"
+                      placeholder="Meta description"
+                      value={locSeoDesc}
+                      onChange={(e) => setLocSeoDesc(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-hairline bg-cream/30 px-3 py-2 text-sm focus:outline-none"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label htmlFor="loc-nearby" className="block text-[11px] font-semibold text-gold uppercase tracking-wider">Nearby Areas (comma-separated)</label>
+                    <input
+                      id="loc-nearby"
+                      type="text"
+                      placeholder="e.g. Gomti Nagar, Hazratganj, Alambagh"
+                      value={locNearbyAreas}
+                      onChange={(e) => setLocNearbyAreas(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-hairline bg-cream/30 px-3 py-2 text-sm focus:outline-none"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-[11px] font-semibold text-gold uppercase tracking-wider mb-1">Available Service Groups</label>
+                    <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto rounded-lg border border-hairline bg-cream/20 p-3">
+                      {serviceGroups.map(sg => (
+                        <label key={sg._id} className="flex items-center gap-2 cursor-pointer text-xs">
+                          <input
+                            type="checkbox"
+                            checked={locGroups.includes(sg._id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setLocGroups([...locGroups, sg._id]);
+                              } else {
+                                setLocGroups(locGroups.filter(id => id !== sg._id));
+                              }
+                            }}
+                            className="accent-brand"
+                          />
+                          <span>{sg.name} ({sg.parentType})</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4 sm:col-span-2 mt-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={locActive}
+                        onChange={(e) => setLocActive(e.target.checked)}
+                        className="accent-brand"
+                      />
+                      <span className="text-xs font-semibold uppercase tracking-wider text-gold font-display">Is Active / Visible</span>
+                    </label>
+                  </div>
+                </div>
+                <div className="flex gap-3 border-t border-hairline pt-4">
+                  <button type="submit" className="rounded bg-brand px-6 py-2 text-xs font-semibold text-cream hover:bg-brand-700">Save Location</button>
+                  <button type="button" onClick={() => setIsAddingLocation(false)} className="rounded border border-hairline px-6 py-2 text-xs font-semibold text-brand bg-white hover:bg-slate-50">Cancel</button>
+                </div>
+              </form>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {locations.map(loc => (
+                  <div key={loc._id} className="rounded-xl border border-hairline bg-surface p-4 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-display text-lg text-brand font-semibold">{loc.name}</h3>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${loc.isActive ? "bg-available/10 text-available" : "bg-blocked/10 text-blocked"}`}>
+                          {loc.isActive ? "Active" : "Inactive"}
+                        </span>
+                      </div>
+                      <p className="text-[10px] font-mono text-muted mt-0.5">/{loc.slug}</p>
+                      <p className="text-xs text-muted mt-2 line-clamp-2">{loc.shortDescription}</p>
+                    </div>
+                    <div className="mt-4 flex gap-2 justify-end border-t border-hairline/60 pt-3">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditLocation(loc)}
+                        className="rounded border border-hairline px-3 py-1 text-[10px] font-semibold text-brand bg-white hover:border-gold hover:text-gold"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteLocation(loc._id)}
+                        className="rounded border border-blocked/30 px-3 py-1 text-[10px] font-semibold text-blocked hover:bg-blocked/5"
+                      >
+                        Deactivate
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* SERVICE GROUPS MANAGER */}
+        {activeTab === "servicegroups" && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between border-b border-hairline pb-2">
+              <h2 className="font-display text-2xl text-brand">Service Groups CMS</h2>
+              {!isAddingGroup && (
+                <button
+                  type="button"
+                  onClick={handleOpenAddGroup}
+                  className="rounded bg-brand px-3 py-1.5 text-xs font-semibold text-cream"
+                >
+                  + Add Service Group
+                </button>
+              )}
+            </div>
+
+            {isAddingGroup ? (
+              <form onSubmit={handleSaveGroup} className="rounded-2xl border border-hairline bg-surface p-6 space-y-6 max-w-xl">
+                <h3 className="font-display text-lg text-brand border-b border-hairline pb-2 font-semibold">
+                  {editingGroup ? `Edit Service Group: ${editingGroup.name}` : "Add New Service Group"}
+                </h3>
+                <div className="grid gap-4 sm:grid-cols-2 text-sm">
+                  <div>
+                    <label htmlFor="sg-name" className="block text-[11px] font-semibold text-gold uppercase tracking-wider">Group Name</label>
+                    <input
+                      id="sg-name"
+                      type="text"
+                      required
+                      placeholder="e.g. Bridal Mehendi"
+                      value={groupName}
+                      onChange={(e) => setGroupName(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-hairline bg-cream/30 px-3 py-2 text-sm focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="sg-slug" className="block text-[11px] font-semibold text-gold uppercase tracking-wider">URL Slug</label>
+                    <input
+                      id="sg-slug"
+                      type="text"
+                      placeholder="e.g. bridal-mehendi (auto-generated if empty)"
+                      value={groupSlug}
+                      onChange={(e) => setGroupSlug(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-hairline bg-cream/30 px-3 py-2 text-sm focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="sg-type" className="block text-[11px] font-semibold text-gold uppercase tracking-wider">Parent Service Type</label>
+                    <select
+                      id="sg-type"
+                      value={groupParentType}
+                      onChange={(e: any) => setGroupParentType(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-hairline bg-cream/30 px-3 py-2 text-sm focus:outline-none"
+                    >
+                      <option value="MEHENDI">Mehendi</option>
+                      <option value="MAKEUP">Makeup</option>
+                      <option value="PARLOUR">Parlour</option>
+                    </select>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label htmlFor="sg-sdesc" className="block text-[11px] font-semibold text-gold uppercase tracking-wider">Short Description</label>
+                    <input
+                      id="sg-sdesc"
+                      type="text"
+                      placeholder="One-liner for cards"
+                      value={groupShortDesc}
+                      onChange={(e) => setGroupShortDesc(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-hairline bg-cream/30 px-3 py-2 text-sm focus:outline-none"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label htmlFor="sg-desc" className="block text-[11px] font-semibold text-gold uppercase tracking-wider">Body Description</label>
+                    <textarea
+                      id="sg-desc"
+                      rows={4}
+                      placeholder="Rich content about this category packages..."
+                      value={groupDesc}
+                      onChange={(e) => setGroupDesc(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-hairline bg-cream/30 px-3 py-2 text-sm focus:outline-none"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label htmlFor="sg-hero" className="block text-[11px] font-semibold text-gold uppercase tracking-wider">Hero Banner URL</label>
+                    <input
+                      id="sg-hero"
+                      type="url"
+                      placeholder="Banner image link"
+                      value={groupHeroImage}
+                      onChange={(e) => setGroupHeroImage(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-hairline bg-cream/30 px-3 py-2 text-sm focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="sg-seot" className="block text-[11px] font-semibold text-gold uppercase tracking-wider">SEO Title</label>
+                    <input
+                      id="sg-seot"
+                      type="text"
+                      placeholder="SEO <title>"
+                      value={groupSeoTitle}
+                      onChange={(e) => setGroupSeoTitle(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-hairline bg-cream/30 px-3 py-2 text-sm focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="sg-seod" className="block text-[11px] font-semibold text-gold uppercase tracking-wider">SEO Description</label>
+                    <input
+                      id="sg-seod"
+                      type="text"
+                      placeholder="Meta description"
+                      value={groupSeoDesc}
+                      onChange={(e) => setGroupSeoDesc(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-hairline bg-cream/30 px-3 py-2 text-sm focus:outline-none"
+                    />
+                  </div>
+                  <div className="flex gap-4 sm:col-span-2 mt-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={groupActive}
+                        onChange={(e) => setGroupActive(e.target.checked)}
+                        className="accent-brand"
+                      />
+                      <span className="text-xs font-semibold uppercase tracking-wider text-gold font-display">Is Active</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={groupFeatured}
+                        onChange={(e) => setGroupFeatured(e.target.checked)}
+                        className="accent-brand"
+                      />
+                      <span className="text-xs font-semibold uppercase tracking-wider text-gold font-display">Feature on Homepage</span>
+                    </label>
+                  </div>
+                </div>
+                <div className="flex gap-3 border-t border-hairline pt-4">
+                  <button type="submit" className="rounded bg-brand px-6 py-2 text-xs font-semibold text-cream hover:bg-brand-700">Save Group</button>
+                  <button type="button" onClick={() => setIsAddingGroup(false)} className="rounded border border-hairline px-6 py-2 text-xs font-semibold text-brand bg-white hover:bg-slate-50">Cancel</button>
+                </div>
+              </form>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {serviceGroups.map(g => (
+                  <div key={g._id} className="rounded-xl border border-hairline bg-surface p-4 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-display text-lg text-brand font-semibold">{g.name}</h3>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${g.isActive ? "bg-available/10 text-available" : "bg-blocked/10 text-blocked"}`}>
+                          {g.isActive ? "Active" : "Inactive"}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="rounded bg-gold/10 px-2 py-0.5 text-[9px] font-semibold text-gold tracking-wide uppercase">{g.parentType}</span>
+                        {g.isFeatured && <span className="rounded bg-brand/10 px-2 py-0.5 text-[9px] font-semibold text-brand tracking-wide uppercase">Featured</span>}
+                      </div>
+                      <p className="text-[10px] font-mono text-muted mt-1.5">/{g.slug}</p>
+                      <p className="text-xs text-muted mt-2 line-clamp-2">{g.shortDescription}</p>
+                    </div>
+                    <div className="mt-4 flex gap-2 justify-end border-t border-hairline/60 pt-3">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditGroup(g)}
+                        className="rounded border border-hairline px-3 py-1 text-[10px] font-semibold text-brand bg-white hover:border-gold hover:text-gold"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteGroup(g._id)}
+                        className="rounded border border-blocked/30 px-3 py-1 text-[10px] font-semibold text-blocked hover:bg-blocked/5"
+                      >
+                        Deactivate
                       </button>
                     </div>
                   </div>
@@ -1092,7 +1869,7 @@ export default function AdminDashboard() {
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-hairline pb-4">
               <h3 className="font-display text-2xl text-brand font-semibold">Payment Verifications</h3>
               <div className="flex gap-2">
-                {(["PENDING", "PAID", "REJECTED", "ALL"] as const).map((st) => (
+                {(["PENDING", "PAID", "REJECTED", "CANCELLED", "ALL"] as const).map((st) => (
                   <button
                     key={st}
                     type="button"
@@ -1103,7 +1880,15 @@ export default function AdminDashboard() {
                         : "bg-surface border-hairline text-brand hover:border-gold"
                     }`}
                   >
-                    {st === "PENDING" ? "Pending Verification" : st === "PAID" ? "Approved" : st === "REJECTED" ? "Rejected" : "All"}
+                    {st === "PENDING"
+                      ? "Pending Verification"
+                      : st === "PAID"
+                      ? "Approved"
+                      : st === "REJECTED"
+                      ? "Rejected"
+                      : st === "CANCELLED"
+                      ? "Cancelled / Refunds"
+                      : "All"}
                   </button>
                 ))}
               </div>
@@ -1124,7 +1909,9 @@ export default function AdminDashboard() {
                         <div className="flex items-center gap-2">
                           <h4 className="font-display text-lg text-brand font-semibold">{b.bookingId}</h4>
                           <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${
-                            b.paymentStatus === "PAYMENT_VERIFICATION_PENDING"
+                            b.bookingStatus === "CANCELLED"
+                              ? "bg-blocked/15 text-blocked border border-blocked/25"
+                              : b.paymentStatus === "PAYMENT_VERIFICATION_PENDING"
                               ? "bg-gold/15 text-gold border border-gold/25"
                               : b.paymentStatus === "BOOKED_AMOUNT_PAID"
                               ? "bg-available/15 text-available border border-available/25"
@@ -1132,7 +1919,7 @@ export default function AdminDashboard() {
                               ? "bg-blocked/15 text-blocked border border-blocked/25"
                               : "bg-muted/15 text-muted border border-muted/25"
                           }`}>
-                            {b.paymentStatus === "PAYMENT_VERIFICATION_PENDING" ? "Pending Verification" : b.paymentStatus}
+                            {b.bookingStatus === "CANCELLED" ? "CANCELLED" : b.paymentStatus === "PAYMENT_VERIFICATION_PENDING" ? "Pending Verification" : b.paymentStatus}
                           </span>
                         </div>
                         <p className="text-[10px] text-muted mt-0.5">Submitted on: {new Date(b.createdAt || Date.now()).toLocaleString("en-IN")}</p>
@@ -1198,8 +1985,34 @@ export default function AdminDashboard() {
                       </div>
                     </div>
 
+                    {/* Cancellation Warning Banner */}
+                    {(b.bookingStatus === "CANCELLED" || b.refundStatus === "PENDING") && (
+                      <div className="rounded-xl bg-red-50 border border-red-200 p-3 text-xs text-red-900 mt-3 space-y-1">
+                        <p className="font-bold text-red-950 uppercase tracking-wider text-[10px]">⚠️ Order Cancelled by Customer</p>
+                        <p>Reason: <strong>{b.cancellationReason || "Customer requested cancellation"}</strong></p>
+                        {b.customerUpiId && (
+                          <p>Customer Payout UPI: <strong className="font-mono text-xs bg-red-100/80 px-1.5 py-0.5 rounded text-red-950 select-all font-bold">{b.customerUpiId}</strong> {b.customerUpiName ? `(${b.customerUpiName})` : ""}</p>
+                        )}
+                        <p className="text-[11px] text-red-800">
+                          {b.refundStatus === "PROCESSED"
+                            ? `✓ Refund of ₹${b.refundAmount || 0} processed.`
+                            : `Refund review is pending. Click Process Refund to process customer payout.`}
+                        </p>
+                      </div>
+                    )}
+
                     {/* Admin Actions */}
-                    {b.paymentStatus === "PAYMENT_VERIFICATION_PENDING" && (
+                    {b.bookingStatus === "CANCELLED" || b.refundStatus === "PENDING" ? (
+                      <div className="flex flex-wrap items-center justify-end gap-2.5 border-t border-hairline pt-4 mt-3">
+                        <button
+                          type="button"
+                          onClick={() => triggerRefundDialog(b)}
+                          className="rounded bg-amber-700 hover:bg-amber-800 text-white px-4 py-2 text-xs font-bold transition-colors shadow-sm"
+                        >
+                          {b.refundStatus === "PROCESSED" ? "View / Edit Refund" : "Process Refund"}
+                        </button>
+                      </div>
+                    ) : (b.paymentStatus === "PAYMENT_VERIFICATION_PENDING" || b.bookingStatus === "AWAITING_REMAINING_PAYMENT") && (
                       <div className="flex flex-wrap items-center justify-end gap-2.5 border-t border-hairline pt-4 mt-3">
                         <button
                           type="button"
@@ -1207,6 +2020,13 @@ export default function AdminDashboard() {
                           className="rounded border border-blocked px-4 py-2 text-xs font-bold text-blocked hover:bg-blocked/5 transition-colors"
                         >
                           Reject Payment
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => triggerPartialDialog(b)}
+                          className="rounded border border-amber-600 bg-amber-50 px-4 py-2 text-xs font-bold text-amber-800 hover:bg-amber-100 transition-colors"
+                        >
+                          Partial Payment
                         </button>
                         <button
                           type="button"
@@ -1432,6 +2252,71 @@ export default function AdminDashboard() {
                 </form>
               )}
             </div>
+
+            {/* Security PIN Control Card */}
+            <div className="max-w-xl rounded-2xl border border-hairline bg-surface p-6 md:p-8 space-y-6 mt-6">
+              <h3 className="font-display text-2xl text-brand border-b border-hairline pb-2 font-semibold">Admin Security PIN</h3>
+              <p className="text-xs text-stone-600 leading-relaxed">
+                The Security PIN is required to authorize final order confirmations. Keep this PIN private.
+              </p>
+
+              <form onSubmit={handlePinSave} className="space-y-4 text-sm text-ink">
+                <div>
+                  <label className="block text-[11px] font-semibold text-gold uppercase tracking-wider">
+                    Current PIN (If already set)
+                  </label>
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder="Enter current PIN"
+                    value={pinCurrent}
+                    onChange={(e) => setPinCurrent(e.target.value.replace(/\D/g, ""))}
+                    className="mt-1 w-full rounded-lg border border-hairline bg-cream/20 px-3 py-2 text-xs text-brand focus:border-gold focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-gold uppercase tracking-wider">
+                    New Security PIN (4–6 numeric digits)
+                  </label>
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    required
+                    maxLength={6}
+                    placeholder="Enter 4-6 digit PIN"
+                    value={pinNew}
+                    onChange={(e) => setPinNew(e.target.value.replace(/\D/g, ""))}
+                    className="mt-1 w-full rounded-lg border border-hairline bg-cream/20 px-3 py-2 text-xs text-brand focus:border-gold focus:outline-none font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-gold uppercase tracking-wider">
+                    Confirm New Security PIN
+                  </label>
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    required
+                    maxLength={6}
+                    placeholder="Re-enter new PIN"
+                    value={pinConfirm}
+                    onChange={(e) => setPinConfirm(e.target.value.replace(/\D/g, ""))}
+                    className="mt-1 w-full rounded-lg border border-hairline bg-cream/20 px-3 py-2 text-xs text-brand focus:border-gold focus:outline-none font-bold"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isSavingPin}
+                  className="w-full rounded bg-brand py-3 text-xs font-bold text-cream hover:bg-brand-700 disabled:opacity-50 transition-colors uppercase tracking-wider"
+                >
+                  {isSavingPin ? "Saving PIN..." : "Save Security PIN"}
+                </button>
+              </form>
+            </div>
           </div>
         )}
       </div>
@@ -1451,54 +2336,286 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Confirm/Reject Modal Dialog */}
+      {/* Confirm / Partial / Reject Modal Dialog */}
       {activeDialogBooking && dialogAction && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="relative w-full max-w-[400px] rounded-2xl bg-surface border border-hairline p-6 shadow-2xl text-sm text-ink space-y-4">
-            <h3 className="font-display text-xl text-brand font-semibold border-b border-hairline pb-2">
-              {dialogAction === "APPROVE" ? "Approve Payment" : "Reject Payment"}
-            </h3>
+          <div className="relative w-full max-w-[440px] rounded-2xl bg-surface border border-hairline p-6 shadow-2xl text-sm text-ink space-y-4">
+            
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-hairline pb-3">
+              <h3 className="font-display text-xl text-brand font-semibold">
+                {dialogAction === "APPROVE"
+                  ? confirmStep === 1
+                    ? "Order Confirmation (Step 1 of 2)"
+                    : "Enter Security PIN (Step 2 of 2)"
+                  : dialogAction === "REFUND"
+                  ? confirmStep === 1
+                    ? "Process Refund (Step 1 of 2)"
+                    : "Enter Security PIN (Step 2 of 2)"
+                  : dialogAction === "PARTIAL"
+                  ? "Verify Partial Payment"
+                  : "Reject Payment"}
+              </h3>
+              <button
+                type="button"
+                onClick={() => { setActiveDialogBooking(null); setDialogAction(null); setConfirmStep(1); setAdminPinInput(""); }}
+                className="text-muted hover:text-brand"
+              >
+                ✕
+              </button>
+            </div>
             
             <form onSubmit={handleDialogSubmit} className="space-y-4">
-              <p className="text-xs text-muted">
-                {dialogAction === "APPROVE"
-                  ? `Are you sure you want to approve the advance payment for booking ${activeDialogBooking.bookingId}? This will mark the booking as CONFIRMED.`
-                  : `Are you sure you want to reject the payment for booking ${activeDialogBooking.bookingId}? This will release the time slot back to AVAILABLE.`}
-              </p>
+              
+              {/* APPROVE STEP 1: Confirmation Summary */}
+              {dialogAction === "APPROVE" && confirmStep === 1 && (
+                <div className="space-y-3">
+                  <div className="rounded-xl bg-amber-50/80 border border-amber-200 p-3.5 text-xs text-amber-900 space-y-1.5">
+                    <p className="font-bold text-amber-950 uppercase tracking-wider text-[10px]">Booking Confirmation Summary:</p>
+                    <p>• <strong>Client:</strong> {activeDialogBooking.customerName} ({activeDialogBooking.customerMobile})</p>
+                    <p>• <strong>Booking ID:</strong> {activeDialogBooking.bookingId}</p>
+                    <p>• <strong>Schedule:</strong> {activeDialogBooking.bookingDate} at {activeDialogBooking.timeSlot}</p>
+                    <p>• <strong>Total Order:</strong> ₹{activeDialogBooking.totalAmount.toLocaleString("en-IN")}</p>
+                    <p>• <strong>Required Deposit:</strong> ₹{activeDialogBooking.onlineBookingAmount.toLocaleString("en-IN")}</p>
+                    <p>• <strong>Paid Amount:</strong> ₹{(activeDialogBooking.paidAmount || 0).toLocaleString("en-IN")}</p>
+                    <p>• <strong>Remaining:</strong> ₹{(activeDialogBooking.remainingAmount || activeDialogBooking.onlineBookingAmount).toLocaleString("en-IN")}</p>
+                  </div>
 
-              {dialogAction === "REJECT" && (
-                <div>
-                  <label className="block text-[10px] font-semibold text-gold uppercase tracking-wider">
-                    Rejection Reason (Sent to Customer via WhatsApp)
-                  </label>
-                  <textarea
-                    required
-                    rows={3}
-                    placeholder="e.g. Transaction ID was not found in bank statements / incorrect amount paid."
-                    value={dialogReason}
-                    onChange={(e) => setDialogReason(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-hairline bg-cream/20 px-3 py-2 text-xs focus:outline-none focus:border-gold"
-                  />
+                  <p className="text-xs text-stone-600 leading-relaxed">
+                    Are you sure you want to confirm this order? Click <strong>Continue</strong> to verify your Admin Security PIN.
+                  </p>
+
+                  <div>
+                    <label className="block text-[10px] font-semibold text-gold uppercase tracking-wider">
+                      Internal Admin Note (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Verified full deposit in bank statement"
+                      value={dialogNote}
+                      onChange={(e) => setDialogNote(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-hairline bg-cream/20 px-3 py-2 text-xs focus:outline-none focus:border-gold"
+                    />
+                  </div>
                 </div>
               )}
 
-              <div>
-                <label className="block text-[10px] font-semibold text-gold uppercase tracking-wider">
-                  Internal Admin Note (Optional)
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Verified with bank statement"
-                  value={dialogNote}
-                  onChange={(e) => setDialogNote(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-hairline bg-cream/20 px-3 py-2 text-xs focus:outline-none focus:border-gold"
-                />
-              </div>
+              {/* APPROVE STEP 2: Security PIN Entry */}
+              {dialogAction === "APPROVE" && confirmStep === 2 && (
+                <div className="space-y-3">
+                  <div className="rounded-xl bg-stone-900 text-white p-4 space-y-2">
+                    <p className="font-bold text-amber-400 uppercase tracking-wider text-[10px]">Security PIN Required</p>
+                    <p className="text-xs text-stone-300">
+                      Enter your 4–6 digit Admin Security PIN to finalize order confirmation for <strong>{activeDialogBooking.bookingId}</strong>.
+                    </p>
+                  </div>
 
-              <div className="flex justify-end gap-2 border-t border-hairline pt-3 mt-4">
+                  <div>
+                    <label className="block text-[10px] font-semibold text-gold uppercase tracking-wider">
+                      Admin Security PIN
+                    </label>
+                    <input
+                      type="password"
+                      inputMode="numeric"
+                      required
+                      maxLength={6}
+                      autoFocus
+                      placeholder="Enter 4-6 digit PIN"
+                      value={adminPinInput}
+                      onChange={(e) => setAdminPinInput(e.target.value.replace(/\D/g, ""))}
+                      className="mt-1 w-full text-center text-lg tracking-widest rounded-lg border border-hairline bg-cream/20 px-3 py-2.5 font-bold text-brand focus:outline-none focus:border-gold"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* REFUND MODAL STEP 1 */}
+              {dialogAction === "REFUND" && confirmStep === 1 && (
+                <div className="space-y-3">
+                  <div className="rounded-xl bg-amber-50/80 border border-amber-200 p-3.5 text-xs text-amber-900 space-y-1.5">
+                    <p className="font-bold text-amber-950 uppercase tracking-wider text-[10px]">Cancellation & Refund Breakdown:</p>
+                    <p>• Client: <strong>{activeDialogBooking.customerName}</strong> ({activeDialogBooking.customerMobile})</p>
+                    <p>• Booking ID: <strong>{activeDialogBooking.bookingId}</strong></p>
+                    <p>• Paid Deposit: <strong>₹{(activeDialogBooking.paidAmount || activeDialogBooking.onlineBookingAmount || 0).toLocaleString("en-IN")}</strong></p>
+                    <p>• Customer Reason: <em>"{activeDialogBooking.cancellationReason || "Not provided"}"</em></p>
+                  </div>
+
+                  {/* Customer Payout Account Info Box */}
+                  <div className="rounded-xl bg-stone-900 text-white p-3.5 text-xs space-y-1 shadow-inner border border-stone-800">
+                    <p className="font-bold text-amber-400 uppercase tracking-wider text-[10px]">Customer Requested Payout Account:</p>
+                    <p>• UPI ID: <span className="font-mono text-xs text-amber-300 bg-stone-800 px-2 py-0.5 rounded select-all font-bold">{activeDialogBooking.customerUpiId || "Not specified"}</span></p>
+                    <p>• Account Name: <strong className="text-stone-200">{activeDialogBooking.customerUpiName || "Not specified"}</strong></p>
+                    <p className="text-[10px] text-stone-400 pt-0.5">ℹ️ Must match original payment account. If different, contact customer on WhatsApp.</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-semibold text-gold uppercase tracking-wider">
+                      Refund Amount to Payout (₹)
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min={0}
+                      max={activeDialogBooking.paidAmount || activeDialogBooking.onlineBookingAmount || 1500}
+                      value={refundAmountInput}
+                      onChange={(e) => setRefundAmountInput(Number(e.target.value))}
+                      className="mt-1 w-full rounded-lg border border-hairline bg-cream/20 px-3 py-2 text-sm font-semibold text-brand focus:outline-none focus:border-gold"
+                    />
+                    <p className="text-[10px] text-muted mt-1">Calculated as deposit minus ₹500 cancellation fee, or adjust manually.</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-semibold text-gold uppercase tracking-wider">
+                      Refund UTR / Reference ID (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. UPI Ref #9876543210"
+                      value={refundTxInput}
+                      onChange={(e) => setRefundTxInput(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-hairline bg-cream/20 px-3 py-2 text-xs focus:outline-none focus:border-gold font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-semibold text-gold uppercase tracking-wider">
+                      Admin Refund Note / Comments (Sent to Customer)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Refund of ₹1000 sent via GPay. ₹500 fee deducted."
+                      value={dialogNote}
+                      onChange={(e) => setDialogNote(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-hairline bg-cream/20 px-3 py-2 text-xs focus:outline-none focus:border-gold"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* REFUND MODAL STEP 2 */}
+              {dialogAction === "REFUND" && confirmStep === 2 && (
+                <div className="space-y-3">
+                  <div className="rounded-xl bg-stone-900 text-white p-4 space-y-2">
+                    <p className="font-bold text-amber-400 uppercase tracking-wider text-[10px]">Confirm Refund with Security PIN</p>
+                    <p className="text-xs text-stone-300">
+                      You are processing a refund of <strong>₹{refundAmountInput}</strong> for booking <strong>{activeDialogBooking.bookingId}</strong>. Enter your Admin Security PIN to confirm payout.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-semibold text-gold uppercase tracking-wider">
+                      Admin Security PIN
+                    </label>
+                    <input
+                      type="password"
+                      inputMode="numeric"
+                      required
+                      maxLength={6}
+                      autoFocus
+                      placeholder="Enter 4-6 digit PIN"
+                      value={adminPinInput}
+                      onChange={(e) => setAdminPinInput(e.target.value.replace(/\D/g, ""))}
+                      className="mt-1 w-full text-center text-lg tracking-widest rounded-lg border border-hairline bg-cream/20 px-3 py-2.5 font-bold text-brand focus:outline-none focus:border-gold"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* PARTIAL PAYMENT MODAL */}
+              {dialogAction === "PARTIAL" && (
+                <div className="space-y-3">
+                  <div className="rounded-xl bg-amber-50/80 border border-amber-200 p-3.5 text-xs text-amber-900 space-y-1">
+                    <p className="font-bold text-amber-950 uppercase tracking-wider text-[10px]">Partial Payment Review:</p>
+                    <p>• Client: <strong>{activeDialogBooking.customerName}</strong> ({activeDialogBooking.customerMobile})</p>
+                    <p>• Required Deposit: <strong>₹{activeDialogBooking.onlineBookingAmount.toLocaleString("en-IN")}</strong></p>
+                    <p>• Transaction ID / UTR: <strong className="font-mono">{activeDialogBooking.transactionId || "None"}</strong></p>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-semibold text-gold uppercase tracking-wider">
+                      Verified Amount Received (₹)
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min={1}
+                      max={activeDialogBooking.onlineBookingAmount}
+                      value={partialAmountInput}
+                      onChange={(e) => setPartialAmountInput(Number(e.target.value))}
+                      className="mt-1 w-full rounded-lg border border-hairline bg-cream/20 px-3 py-2 text-sm font-semibold text-brand focus:outline-none focus:border-gold"
+                    />
+                  </div>
+
+                  <div className="rounded-lg bg-stone-100 p-2.5 text-xs text-stone-700 space-y-0.5 font-medium">
+                    <p>Remaining Amount Required: <strong className="text-amber-700">₹{Math.max(0, activeDialogBooking.onlineBookingAmount - (partialAmountInput || 0)).toLocaleString("en-IN")}</strong></p>
+                    <p className="text-[10px] text-stone-500">Status will update to: Awaiting Remaining Payment</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-semibold text-gold uppercase tracking-wider">
+                      Internal Admin Note (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Received partial advance ₹500 via GPay"
+                      value={dialogNote}
+                      onChange={(e) => setDialogNote(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-hairline bg-cream/20 px-3 py-2 text-xs focus:outline-none focus:border-gold"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* REJECT MODAL */}
+              {dialogAction === "REJECT" && (
+                <div className="space-y-3">
+                  <p className="text-xs text-stone-600 leading-relaxed">
+                    Are you sure you want to reject the payment for booking <strong>{activeDialogBooking.bookingId}</strong>? This will release the time slot back to AVAILABLE.
+                  </p>
+
+                  <div>
+                    <label className="block text-[10px] font-semibold text-gold uppercase tracking-wider">
+                      Rejection Reason (Sent to Customer)
+                    </label>
+                    <textarea
+                      required
+                      rows={3}
+                      placeholder="e.g. Transaction ID was not found in bank statements / invalid proof."
+                      value={dialogReason}
+                      onChange={(e) => setDialogReason(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-hairline bg-cream/20 px-3 py-2 text-xs focus:outline-none focus:border-gold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-semibold text-gold uppercase tracking-wider">
+                      Internal Admin Note (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Verified with bank statement"
+                      value={dialogNote}
+                      onChange={(e) => setDialogNote(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-hairline bg-cream/20 px-3 py-2 text-xs focus:outline-none focus:border-gold"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Form Buttons */}
+              <div className="flex items-center justify-end gap-2 border-t border-hairline pt-3 mt-4">
+                {(dialogAction === "APPROVE" || dialogAction === "REFUND") && confirmStep === 2 && (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmStep(1)}
+                    className="mr-auto text-xs text-stone-500 hover:text-stone-800 font-semibold"
+                  >
+                    ← Back to Summary
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={() => { setActiveDialogBooking(null); setDialogAction(null); }}
+                  onClick={() => { setActiveDialogBooking(null); setDialogAction(null); setConfirmStep(1); setAdminPinInput(""); }}
                   className="rounded border border-hairline bg-surface px-4 py-2 text-xs font-semibold text-brand hover:bg-cream/40"
                 >
                   Cancel
@@ -1507,10 +2624,28 @@ export default function AdminDashboard() {
                   type="submit"
                   disabled={isProcessingAction}
                   className={`rounded px-4 py-2 text-xs font-bold text-cream transition-colors ${
-                    dialogAction === "APPROVE" ? "bg-brand hover:bg-brand-700" : "bg-blocked hover:bg-red-800"
+                    dialogAction === "APPROVE"
+                      ? "bg-brand hover:bg-brand-700"
+                      : dialogAction === "REFUND"
+                      ? "bg-amber-700 hover:bg-amber-800"
+                      : dialogAction === "PARTIAL"
+                      ? "bg-amber-700 hover:bg-amber-800"
+                      : "bg-blocked hover:bg-red-800"
                   }`}
                 >
-                  {isProcessingAction ? "Processing..." : dialogAction === "APPROVE" ? "Confirm Payment" : "Reject Proof"}
+                  {isProcessingAction
+                    ? "Processing..."
+                    : dialogAction === "APPROVE"
+                    ? confirmStep === 1
+                      ? "Continue to PIN →"
+                      : "Confirm Order (PIN)"
+                    : dialogAction === "REFUND"
+                    ? confirmStep === 1
+                      ? "Continue to PIN →"
+                      : "Confirm & Process Refund (PIN)"
+                    : dialogAction === "PARTIAL"
+                    ? "Confirm Partial Payment"
+                    : "Reject Proof"}
                 </button>
               </div>
             </form>

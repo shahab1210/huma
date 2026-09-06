@@ -3,6 +3,7 @@ import Header from "./components/Header";
 import Footer from "./components/Footer";
 import MobileTabBar from "./components/MobileTabBar";
 import WhatsAppFab from "./components/WhatsAppFab";
+import AdminLayout from "./components/AdminLayout";
 
 // Page Views
 import Home from "./pages/Home";
@@ -15,6 +16,24 @@ import AdminDashboard from "./pages/AdminDashboard";
 import About from "./pages/About";
 import Faq from "./pages/Faq";
 import Contact from "./pages/Contact";
+import LocationPage from "./pages/LocationPage";
+import ServiceGroupPage from "./pages/ServiceGroupPage";
+import NotFound from "./pages/NotFound";
+import { useEffect } from "react";
+
+const VALID_STATIC_VIEWS = new Set([
+  "home",
+  "mehendi",
+  "makeup",
+  "parlour",
+  "cart",
+  "booking",
+  "auth",
+  "dashboard",
+  "about",
+  "faq",
+  "contact",
+]);
 
 function ToastContainer() {
   const { toasts, removeToast } = useApp();
@@ -49,10 +68,49 @@ function ToastContainer() {
   );
 }
 
-function AppContent() {
+/** Redirects legacy admin URLs to the new /admin/ namespace */
+function LegacyRedirector() {
+  const { currentView, navigate } = useApp();
+
+  useEffect(() => {
+    if (currentView === "admin-dashboard" || currentView === "huma-secret-gate") {
+      navigate("admin/login");
+    }
+  }, [currentView]);
+
+  return null;
+}
+
+function AdminContent() {
   const { currentView } = useApp();
 
+  // Extract the admin sub-path: "admin/login" -> "login", "admin/dashboard" -> "dashboard"
+  const adminPath = currentView.startsWith("admin/")
+    ? currentView.slice(6)
+    : currentView === "admin"
+    ? "login"
+    : "login";
+
+  // AdminDashboard handles its own login/dashboard state internally
+  return <AdminDashboard adminPath={adminPath} />;
+}
+
+function CustomerContent() {
+  const { currentView, locations, serviceGroups } = useApp();
+
   const renderView = () => {
+    // Check if currentView is a dynamic location slug
+    const isLocation = locations.some((loc) => loc.slug === currentView);
+    if (isLocation) {
+      return <LocationPage slug={currentView} />;
+    }
+
+    // Check if currentView is a dynamic service group slug
+    const isServiceGroup = serviceGroups.some((sg) => sg.slug === currentView);
+    if (isServiceGroup) {
+      return <ServiceGroupPage slug={currentView} />;
+    }
+
     switch (currentView) {
       case "home":
         return <Home />;
@@ -70,9 +128,6 @@ function AppContent() {
         return <Auth />;
       case "dashboard":
         return <Dashboard />;
-      case "huma-secret-gate":
-      case "admin-dashboard":
-        return <AdminDashboard />;
       case "about":
         return <About />;
       case "faq":
@@ -80,7 +135,7 @@ function AppContent() {
       case "contact":
         return <Contact />;
       default:
-        return <Home />;
+        return <NotFound />;
     }
   };
 
@@ -93,8 +148,30 @@ function AppContent() {
       <Footer />
       <WhatsAppFab />
       <MobileTabBar />
-      <ToastContainer />
     </div>
+  );
+}
+
+function AppContent() {
+  const { currentView } = useApp();
+
+  const isAdminRoute =
+    currentView.startsWith("admin") ||
+    currentView === "admin-dashboard" ||
+    currentView === "huma-secret-gate";
+
+  return (
+    <>
+      <LegacyRedirector />
+      {isAdminRoute && currentView !== "admin-dashboard" && currentView !== "huma-secret-gate" ? (
+        <AdminLayout>
+          <AdminContent />
+        </AdminLayout>
+      ) : (
+        !isAdminRoute && <CustomerContent />
+      )}
+      <ToastContainer />
+    </>
   );
 }
 

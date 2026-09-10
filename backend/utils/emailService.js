@@ -1,7 +1,7 @@
 /**
  * @file emailService.js
- * @description Email OTP delivery service supporting Resend and Gmail SMTP.
- * Mirrors the WhatsApp service pattern with a mock mode fallback.
+ * @description Email OTP delivery service supporting Gmail SMTP (primary) and Resend.
+ * Enforces real email delivery and returns clear errors when delivery fails.
  */
 
 /**
@@ -9,13 +9,16 @@
  * @returns {boolean}
  */
 const isEmailConfigured = () => {
-  const resendKey = process.env.RESEND_API_KEY;
+  const user = (process.env.EMAIL_USER || '').trim();
+  const pass = (process.env.EMAIL_APP_PASSWORD || '').replace(/\s+/g, '').trim();
+  if (user && pass && user.length > 3 && pass.length > 3 && !pass.includes('placeholder')) {
+    return true;
+  }
+  const resendKey = (process.env.RESEND_API_KEY || '').trim();
   if (resendKey && resendKey.length > 5 && !resendKey.includes('placeholder')) {
     return true;
   }
-  const user = process.env.EMAIL_USER;
-  const pass = process.env.EMAIL_APP_PASSWORD;
-  return Boolean(user && pass && user.length > 3 && pass.length > 3 && !pass.includes('placeholder'));
+  return false;
 };
 
 /** Lazily created Resend client */
@@ -23,7 +26,7 @@ let resendClient = null;
 const getResendClient = () => {
   if (resendClient) return resendClient;
   const { Resend } = require('resend');
-  resendClient = new Resend(process.env.RESEND_API_KEY);
+  resendClient = new Resend((process.env.RESEND_API_KEY || '').trim());
   return resendClient;
 };
 
@@ -32,11 +35,14 @@ let nodemailerTransporter = null;
 const getNodemailerTransporter = () => {
   if (nodemailerTransporter) return nodemailerTransporter;
   const nodemailer = require('nodemailer');
+  const user = (process.env.EMAIL_USER || '').trim();
+  const pass = (process.env.EMAIL_APP_PASSWORD || '').replace(/\s+/g, '').trim();
+
   nodemailerTransporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_APP_PASSWORD,
+      user,
+      pass,
     },
   });
   return nodemailerTransporter;
@@ -49,11 +55,24 @@ const getNodemailerTransporter = () => {
  * @returns {Promise<{success: boolean, messageId?: string, mock?: boolean}>}
  */
 const sendOTPEmail = async (email, otpCode) => {
-  if (!isEmailConfigured()) {
+  const emailUser = (process.env.EMAIL_USER || '').trim();
+  const emailPass = (process.env.EMAIL_APP_PASSWORD || '').replace(/\s+/g, '').trim();
+  const resendKey = (process.env.RESEND_API_KEY || '').trim();
+
+  const isConfigured = isEmailConfigured();
+
+  // If not configured in production, fail immediately with actionable error
+  if (!isConfigured) {
+    if (process.env.NODE_ENV === 'production') {
+      console.error('✕ Email service is not configured in production environment.');
+      throw new Error('Email service is not configured. Please set EMAIL_USER and EMAIL_APP_PASSWORD in environment variables.');
+    }
+
+    // Development mock mode
     console.log(`\n⚠ Email MOCK MODE`);
     console.log(`📧 To: ${email}`);
     console.log(`🔑 OTP: ${otpCode}`);
-    console.log(`(Configure RESEND_API_KEY or EMAIL_USER & EMAIL_APP_PASSWORD for real delivery)\n`);
+    console.log(`(Configure EMAIL_USER & EMAIL_APP_PASSWORD in .env for real delivery)\n`);
     return { success: true, mock: true };
   }
 
@@ -108,8 +127,31 @@ const sendOTPEmail = async (email, otpCode) => {
     </html>
   `;
 
-  // 1. Try Resend if configured
-  if (process.env.RESEND_API_KEY && !process.env.RESEND_API_KEY.includes('placeholder')) {
+  // 1. Try Gmail SMTP if configured
+  if (emailUser && emailPass && !emailPass.includes('placeholder')) {
+    try {
+      const transporter = getNodemailerTransporter();
+      const info = await transporter.sendMail({
+        from: `"Huma Mehendi" <${emailUser}>`,
+        to: email,
+        subject: 'Your Huma Mehendi verification code',
+        html: htmlContent,
+        text: `Your Huma Mehendi verification code is ${otpCode}. It expires in 5 minutes. Do not share this code with anyone.`,
+      });
+
+      console.log(`✓ Email OTP sent to ${email} via Gmail SMTP (messageId: ${info.messageId})`);
+      return { success: true, messageId: info.messageId };
+    } catch (error) {
+      console.error(`✕ Gmail SMTP failed for ${email}: ${error.message}`);
+      if (!resendKey || resendKey.includes('placeholder')) {
+        throw new Error(`Gmail SMTP delivery failed: ${error.message}`);
+      }
+      console.log(`Attempting fallback to Resend for ${email}...`);
+    }
+  }
+
+  // 2. Try Resend if configured (or as fallback)
+  if (resendKey && !resendKey.includes('placeholder')) {
     try {
       const fromAddress = process.env.EMAIL_FROM || 'Huma Mehendi <noreply@humamehendi.in>';
       const { data, error } = await getResendClient().emails.send({
@@ -133,26 +175,7 @@ const sendOTPEmail = async (email, otpCode) => {
     }
   }
 
-  // 2. Fallback to Nodemailer / Gmail SMTP
-  if (process.env.EMAIL_USER && process.env.EMAIL_APP_PASSWORD) {
-    try {
-      const info = await getNodemailerTransporter().sendMail({
-        from: `"Huma Mehendi" <${process.env.EMAIL_USER}>`,
-        to: email,
-        subject: 'Your Huma Mehendi verification code',
-        html: htmlContent,
-        text: `Your Huma Mehendi verification code is ${otpCode}. It expires in 5 minutes. Do not share this code with anyone.`,
-      });
-
-      console.log(`✓ Email OTP sent to ${email} via Gmail SMTP (messageId: ${info.messageId})`);
-      return { success: true, messageId: info.messageId };
-    } catch (error) {
-      console.error(`✕ Gmail SMTP failed for ${email}: ${error.message}`);
-      throw new Error(`Email delivery failed: ${error.message}`);
-    }
-  }
-
-  return { success: true, mock: true };
+  throw new Error('Email service failed to deliver OTP.');
 };
 
 module.exports = { sendOTPEmail, isEmailConfigured };

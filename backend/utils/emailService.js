@@ -1,20 +1,46 @@
 /**
  * @file emailService.js
- * @description Email OTP delivery service supporting Gmail SMTP (primary) and Resend.
- * Enforces real email delivery and returns clear errors when delivery fails.
+ * @description Real Email OTP delivery service supporting Gmail SMTP (primary) and Resend.
+ * Strictly enforces real email delivery and returns clear errors when delivery fails.
  */
 
 /**
- * Check whether email sending is configured.
+ * Retrieve and sanitize email credentials from environment variables.
+ * Checks EMAIL_USER, EMAIL_APP_PASSWORD and common fallback aliases.
+ */
+const getEmailCredentials = () => {
+  const user = (
+    process.env.EMAIL_USER ||
+    process.env.GMAIL_USER ||
+    process.env.SMTP_USER ||
+    process.env.MAIL_USERNAME ||
+    ''
+  ).trim();
+
+  const pass = (
+    process.env.EMAIL_APP_PASSWORD ||
+    process.env.EMAIL_PASSWORD ||
+    process.env.EMAIL_PASS ||
+    process.env.GMAIL_APP_PASSWORD ||
+    process.env.SMTP_PASSWORD ||
+    process.env.SMTP_PASS ||
+    ''
+  ).replace(/\s+/g, '').trim();
+
+  const resendKey = (process.env.RESEND_API_KEY || '').trim();
+
+  return { user, pass, resendKey };
+};
+
+/**
+ * Check whether email sending is configured with valid credentials.
  * @returns {boolean}
  */
 const isEmailConfigured = () => {
-  const user = (process.env.EMAIL_USER || '').trim();
-  const pass = (process.env.EMAIL_APP_PASSWORD || '').replace(/\s+/g, '').trim();
+  const { user, pass, resendKey } = getEmailCredentials();
   if (user && pass && user.length > 3 && pass.length > 3 && !pass.includes('placeholder')) {
     return true;
   }
-  const resendKey = (process.env.RESEND_API_KEY || '').trim();
   if (resendKey && resendKey.length > 5 && !resendKey.includes('placeholder')) {
     return true;
   }
@@ -26,54 +52,59 @@ let resendClient = null;
 const getResendClient = () => {
   if (resendClient) return resendClient;
   const { Resend } = require('resend');
-  resendClient = new Resend((process.env.RESEND_API_KEY || '').trim());
+  const { resendKey } = getEmailCredentials();
+  resendClient = new Resend(resendKey);
   return resendClient;
 };
 
-/** Lazily created Nodemailer transporter */
-let nodemailerTransporter = null;
+/** Create Nodemailer transporter for Gmail SMTP */
 const getNodemailerTransporter = () => {
-  if (nodemailerTransporter) return nodemailerTransporter;
   const nodemailer = require('nodemailer');
-  const user = (process.env.EMAIL_USER || '').trim();
-  const pass = (process.env.EMAIL_APP_PASSWORD || '').replace(/\s+/g, '').trim();
+  const { user, pass } = getEmailCredentials();
 
-  nodemailerTransporter = nodemailer.createTransport({
+  return nodemailer.createTransport({
     service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
     auth: {
       user,
       pass,
     },
+    tls: {
+      rejectUnauthorized: false,
+    },
   });
-  return nodemailerTransporter;
 };
 
 /**
- * Send a branded OTP email.
+ * Send a branded OTP email via real Gmail SMTP.
  * @param {string} email - Recipient email address
  * @param {string} otpCode - 6-digit OTP
- * @returns {Promise<{success: boolean, messageId?: string, mock?: boolean}>}
+ * @returns {Promise<{success: boolean, messageId?: string}>}
  */
 const sendOTPEmail = async (email, otpCode) => {
-  const emailUser = (process.env.EMAIL_USER || '').trim();
-  const emailPass = (process.env.EMAIL_APP_PASSWORD || '').replace(/\s+/g, '').trim();
-  const resendKey = (process.env.RESEND_API_KEY || '').trim();
+  const { user: emailUser, pass: emailPass, resendKey } = getEmailCredentials();
 
-  const isConfigured = isEmailConfigured();
+  const hasGmailConfig = Boolean(
+    emailUser &&
+    emailPass &&
+    emailUser.length > 3 &&
+    emailPass.length > 3 &&
+    !emailPass.includes('placeholder')
+  );
 
-  // If not configured in production, fail immediately with actionable error
-  if (!isConfigured) {
-    if (process.env.NODE_ENV === 'production') {
-      console.error('✕ Email service is not configured in production environment.');
-      throw new Error('Email service is not configured. Please set EMAIL_USER and EMAIL_APP_PASSWORD in environment variables.');
-    }
+  const hasResendConfig = Boolean(
+    resendKey &&
+    resendKey.length > 5 &&
+    !resendKey.includes('placeholder')
+  );
 
-    // Development mock mode
-    console.log(`\n⚠ Email MOCK MODE`);
-    console.log(`📧 To: ${email}`);
-    console.log(`🔑 OTP: ${otpCode}`);
-    console.log(`(Configure EMAIL_USER & EMAIL_APP_PASSWORD in .env for real delivery)\n`);
-    return { success: true, mock: true };
+  // If no email delivery credentials are set, fail immediately
+  if (!hasGmailConfig && !hasResendConfig) {
+    const errorMsg = 'Email service is not configured. Please set EMAIL_USER and EMAIL_APP_PASSWORD in environment variables.';
+    console.error(`✕ ${errorMsg}`);
+    throw new Error(errorMsg);
   }
 
   const htmlContent = `
@@ -127,8 +158,8 @@ const sendOTPEmail = async (email, otpCode) => {
     </html>
   `;
 
-  // 1. Try Gmail SMTP if configured
-  if (emailUser && emailPass && !emailPass.includes('placeholder')) {
+  // 1. Primary: Try Gmail SMTP via Nodemailer
+  if (hasGmailConfig) {
     try {
       const transporter = getNodemailerTransporter();
       const info = await transporter.sendMail({
@@ -143,15 +174,15 @@ const sendOTPEmail = async (email, otpCode) => {
       return { success: true, messageId: info.messageId };
     } catch (error) {
       console.error(`✕ Gmail SMTP failed for ${email}: ${error.message}`);
-      if (!resendKey || resendKey.includes('placeholder')) {
+      if (!hasResendConfig) {
         throw new Error(`Gmail SMTP delivery failed: ${error.message}`);
       }
       console.log(`Attempting fallback to Resend for ${email}...`);
     }
   }
 
-  // 2. Try Resend if configured (or as fallback)
-  if (resendKey && !resendKey.includes('placeholder')) {
+  // 2. Secondary: Try Resend if configured
+  if (hasResendConfig) {
     try {
       const fromAddress = process.env.EMAIL_FROM || 'Huma Mehendi <noreply@humamehendi.in>';
       const { data, error } = await getResendClient().emails.send({
@@ -178,4 +209,4 @@ const sendOTPEmail = async (email, otpCode) => {
   throw new Error('Email service failed to deliver OTP.');
 };
 
-module.exports = { sendOTPEmail, isEmailConfigured };
+module.exports = { sendOTPEmail, isEmailConfigured, getEmailCredentials };

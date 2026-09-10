@@ -189,10 +189,19 @@ const initDB = async () => {
       await dropLegacyIndex('email_1');
       await dropLegacyIndex('googleId_1');
 
-      // Clean up any legacy documents with explicit null values
-      await User.updateMany({ mobileNumber: null }, { $unset: { mobileNumber: "" } });
-      await User.updateMany({ email: null }, { $unset: { email: "" } });
-      await User.updateMany({ googleId: null }, { $unset: { googleId: "" } });
+      // Clean up any legacy documents with explicit null or empty string values
+      await User.updateMany(
+        { $or: [{ mobileNumber: null }, { mobileNumber: '' }] },
+        { $unset: { mobileNumber: 1 } }
+      );
+      await User.updateMany(
+        { $or: [{ email: null }, { email: '' }] },
+        { $unset: { email: 1 } }
+      );
+      await User.updateMany(
+        { $or: [{ googleId: null }, { googleId: '' }] },
+        { $unset: { googleId: 1 } }
+      );
 
       await User.syncIndexes();
       console.log('✓ User indexes synced with partial unique filters (mobileNumber, email, googleId)');

@@ -76,12 +76,12 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-// Partial Unique Indexes: only indexes non-null/string values, allowing multiple users with no mobile/email/googleId
+// Partial Unique Indexes: only indexes non-empty string values, allowing multiple users without mobile/email/googleId
 userSchema.index(
   { mobileNumber: 1 },
   {
     unique: true,
-    partialFilterExpression: { mobileNumber: { $type: 'string' } },
+    partialFilterExpression: { mobileNumber: { $gt: '' } },
   }
 );
 
@@ -89,7 +89,7 @@ userSchema.index(
   { email: 1 },
   {
     unique: true,
-    partialFilterExpression: { email: { $type: 'string' } },
+    partialFilterExpression: { email: { $gt: '' } },
   }
 );
 
@@ -97,7 +97,7 @@ userSchema.index(
   { googleId: 1 },
   {
     unique: true,
-    partialFilterExpression: { googleId: { $type: 'string' } },
+    partialFilterExpression: { googleId: { $gt: '' } },
   }
 );
 

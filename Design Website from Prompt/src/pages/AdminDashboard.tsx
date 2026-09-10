@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useApp, type Booking, type Review } from "../context/AppContext";
-import { type Service } from "../services/api";
+import { type Service, BASE_URL } from "../services/api";
 
 export default function AdminDashboard() {
   const {
@@ -486,8 +486,6 @@ export default function AdminDashboard() {
     addServiceArea(newAreaInput.trim());
     setNewAreaInput("");
   };
-
-  const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
   const handleOpenAddLocation = () => {
     setEditingLocation(null);

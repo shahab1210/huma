@@ -27,36 +27,54 @@ app.use(cookieParser());
 
 /* ── Security ── */
 app.use(helmet());
-// Setup CORS: Split comma-separated FRONTEND_URLs and strip trailing slashes
-const allowedOrigins = process.env.FRONTEND_URL
-  ? process.env.FRONTEND_URL.split(',').map(url => url.trim().replace(/\/$/, ''))
-  : ['http://localhost:8443'];
+// Setup CORS: Production domain, www subdomain, localhost ports, and any env FRONTEND_URL
+const defaultOrigins = [
+  'https://humamehendi.in',
+  'https://www.humamehendi.in',
+  'http://localhost:8443',
+  'http://localhost:5173',
+  'http://localhost:5000',
+  'http://localhost:5001',
+];
 
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      if (!origin) return callback(null, true);
+const envOrigins = process.env.FRONTEND_URL
+  ? process.env.FRONTEND_URL.split(',').map(url => url.trim().replace(/\/$/, '')).filter(Boolean)
+  : [];
 
-      const normalizedOrigin = origin.replace(/\/$/, '');
-      const isAllowed = allowedOrigins.some(allowed => {
-        if (allowed === normalizedOrigin) return true;
-        // Allow dynamic Vercel previews if any Vercel domain is configured
-        if (allowed.includes('.vercel.app') && normalizedOrigin.endsWith('.vercel.app')) return true;
-        return false;
-      });
+const allowedOrigins = [...new Set([...defaultOrigins, ...envOrigins])];
 
-      const isLocal = normalizedOrigin.startsWith('http://localhost') || normalizedOrigin.startsWith('http://127.0.0.1');
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
 
-      if (isAllowed || isLocal) {
-        callback(null, true);
-      } else {
-        console.warn(`[CORS Blocked] Origin: ${origin} not matched in:`, allowedOrigins);
-        callback(new Error('Not allowed by CORS'));
-      }
-    },
-    credentials: true,
-  })
-);
+    const normalizedOrigin = origin.replace(/\/$/, '').toLowerCase();
+
+    const isExplicitlyAllowed = allowedOrigins.some(
+      allowed => allowed.toLowerCase() === normalizedOrigin
+    );
+
+    const isVercelPreview = normalizedOrigin.endsWith('.vercel.app');
+    const isRenderDomain = normalizedOrigin.endsWith('.onrender.com');
+    const isLocal = normalizedOrigin.startsWith('http://localhost:') ||
+                    normalizedOrigin.startsWith('http://127.0.0.1:') ||
+                    normalizedOrigin === 'http://localhost' ||
+                    normalizedOrigin === 'http://127.0.0.1';
+
+    if (isExplicitlyAllowed || isVercelPreview || isRenderDomain || isLocal) {
+      callback(null, true);
+    } else {
+      console.warn(`[CORS Blocked] Origin: ${origin} not matched in allowed origins`);
+      callback(null, false);
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'x-device-fingerprint'],
+  exposedHeaders: ['Set-Cookie'],
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 /* ── Rate limiting ── */
 const limiter = rateLimit({

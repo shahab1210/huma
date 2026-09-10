@@ -178,7 +178,8 @@ const generateAndSendOtpMultiChannel = async (identifier, purpose, method) => {
       { isUsed: true }
     );
     const channelName = method === 'EMAIL' ? 'email' : method === 'SMS' ? 'SMS' : 'WhatsApp';
-    throw new ApiError(502, `Failed to send verification code via ${channelName}. Please try again.`);
+    const detail = err.message ? ` (${err.message})` : '';
+    throw new ApiError(502, `Failed to send verification code via ${channelName}${detail}. Please try again.`);
   }
 };
 

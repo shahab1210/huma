@@ -36,20 +36,23 @@ const sendWhatsAppOtp = async (mobileNumber, otpCode) => {
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
   const templateName = process.env.WHATSAPP_OTP_TEMPLATE_NAME || 'huma_otp_verification';
+  const langCode = process.env.WHATSAPP_TEMPLATE_LANG || 'en';
 
   const url = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`;
+  const cleanTo = mobileNumber.replace('+', '');
 
-  try {
-    const response = await axios.post(
+  // Helper to try sending with specific button component structure
+  const trySend = async (buttonSubType, paramType, paramKey) => {
+    return axios.post(
       url,
       {
         messaging_product: 'whatsapp',
         recipient_type: 'individual',
-        to: mobileNumber.replace('+', ''),  // Meta expects without +
+        to: cleanTo,
         type: 'template',
         template: {
           name: templateName,
-          language: { code: 'en' },
+          language: { code: langCode },
           components: [
             {
               type: 'body',
@@ -62,12 +65,12 @@ const sendWhatsAppOtp = async (mobileNumber, otpCode) => {
             },
             {
               type: 'button',
-              sub_type: 'copy_code',
+              sub_type: buttonSubType,
               index: '0',
               parameters: [
                 {
-                  type: 'coupon_code',
-                  coupon_code: otpCode,
+                  type: paramType,
+                  [paramKey]: otpCode,
                 },
               ],
             },
@@ -82,14 +85,36 @@ const sendWhatsAppOtp = async (mobileNumber, otpCode) => {
         timeout: 10000,
       }
     );
+  };
+
+  try {
+    // Primary: Meta auth template with copy_code / text parameter
+    let response;
+    try {
+      response = await trySend('copy_code', 'text', 'text');
+    } catch (primaryErr) {
+      // If copy_code fails, try url button type fallback
+      try {
+        response = await trySend('url', 'text', 'text');
+      } catch (fallbackErr) {
+        // If that fails, try coupon_code param fallback
+        try {
+          response = await trySend('copy_code', 'coupon_code', 'coupon_code');
+        } catch {
+          // Throw original primary error for clarity
+          throw primaryErr;
+        }
+      }
+    }
 
     const messageId = response.data?.messages?.[0]?.id;
     console.log(`✓ WhatsApp OTP sent to ${mobileNumber} (message: ${messageId})`);
     return { success: true, messageId };
   } catch (error) {
-    const errMsg = error.response?.data?.error?.message || error.message;
-    console.error(`✕ WhatsApp OTP failed for ${mobileNumber}: ${errMsg}`);
-    throw new Error(`WhatsApp delivery failed: ${errMsg}`);
+    const dataErr = error.response?.data?.error;
+    const errMsg = dataErr?.message || dataErr?.error_user_msg || error.message;
+    console.error(`✕ WhatsApp OTP failed for ${mobileNumber}:`, JSON.stringify(error.response?.data || error.message));
+    throw new Error(errMsg);
   }
 };
 

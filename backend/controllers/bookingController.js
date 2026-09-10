@@ -7,23 +7,38 @@ const BusinessSettings = require('../models/BusinessSettings');
 const Location = require('../models/Location');
 const generateBookingId = require('../utils/generateBookingId');
 const Payment = require('../models/Payment');
+const User = require('../models/User');
+const { normalizeMobile } = require('../utils/phoneUtils');
 const { ApiError } = require('../middleware/errorHandler');
 
 /**
  * POST /api/bookings
  * Create a new booking. Requires authenticated customer.
  *
- * Body: { items: [{ itemType, itemId, quantity }], serviceArea, address, bookingDate, timeSlotId, customerNotes, locationId }
+ * Body: { items: [{ itemType, itemId, quantity }], serviceArea, address, bookingDate, timeSlotId, customerNotes, locationId, mobileNumber }
  */
 const createBooking = async (req, res, next) => {
   try {
-    const { items, serviceArea, address, bookingDate, timeSlotId, customerNotes, locationId } = req.body;
+    const { items, serviceArea, address, bookingDate, timeSlotId, customerNotes, locationId, mobileNumber } = req.body;
 
     if (!items || !items.length) throw new ApiError(400, 'At least one item is required.');
     if (!serviceArea) throw new ApiError(400, 'Service area is required.');
     if (!address) throw new ApiError(400, 'Address is required.');
     if (!bookingDate) throw new ApiError(400, 'Booking date is required.');
     if (!timeSlotId) throw new ApiError(400, 'Time slot is required.');
+
+    // Enforce compulsory mobile number at checkout/order placement
+    const customerUser = await User.findById(req.user._id);
+    const rawMobile = mobileNumber || customerUser?.mobileNumber;
+    if (!rawMobile) {
+      throw new ApiError(400, 'A valid mobile number is required to place a booking.');
+    }
+    const normalizedMobile = normalizeMobile(rawMobile);
+    if (!customerUser.mobileNumber) {
+      customerUser.mobileNumber = normalizedMobile;
+      customerUser.isMobileVerified = true;
+      await customerUser.save();
+    }
 
     // Find the dynamic Location document
     let locationDoc = null;

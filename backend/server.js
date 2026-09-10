@@ -172,6 +172,34 @@ const initDB = async () => {
     const Location = require('./models/Location');
     const ServiceGroup = require('./models/ServiceGroup');
 
+    // Safe Index Migration: Drop legacy unique indexes on users collection and sync partial unique indexes
+    try {
+      const userIndexes = await User.collection.getIndexes();
+      const dropLegacyIndex = async (indexName) => {
+        if (userIndexes[indexName]) {
+          try {
+            await User.collection.dropIndex(indexName);
+          } catch (e) {
+            console.warn(`[Index Migration] Note dropping ${indexName}:`, e.message);
+          }
+        }
+      };
+
+      await dropLegacyIndex('mobileNumber_1');
+      await dropLegacyIndex('email_1');
+      await dropLegacyIndex('googleId_1');
+
+      // Clean up any legacy documents with explicit null values
+      await User.updateMany({ mobileNumber: null }, { $unset: { mobileNumber: "" } });
+      await User.updateMany({ email: null }, { $unset: { email: "" } });
+      await User.updateMany({ googleId: null }, { $unset: { googleId: "" } });
+
+      await User.syncIndexes();
+      console.log('✓ User indexes synced with partial unique filters (mobileNumber, email, googleId)');
+    } catch (idxErr) {
+      console.warn('⚠ Index migration note:', idxErr.message);
+    }
+
     const existingAdmin = await User.findOne({ role: 'ADMIN' });
     if (!existingAdmin) {
       console.log('🌱 No admin user found. Auto-seeding admin account...');

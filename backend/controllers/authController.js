@@ -869,20 +869,19 @@ const googleAuth = async (req, res, next) => {
       });
     }
 
-    // 2. Check for existing user with matching verified email (safe linking)
-    if (googleProfile.email && googleProfile.emailVerified) {
-      user = await User.findOne({
-        email: googleProfile.email,
-        isActive: true,
-        $or: [{ isMobileVerified: true }, { isEmailVerified: true }],
-      });
+    // 2. Check for existing user with matching email (safe linking)
+    if (googleProfile.email) {
+      const emailLower = googleProfile.email.toLowerCase().trim();
+      user = await User.findOne({ email: emailLower, isActive: true });
 
       if (user) {
         user.googleId = googleProfile.googleId;
         if (!user.authProviders.includes('GOOGLE')) {
           user.authProviders.push('GOOGLE');
         }
-        user.isEmailVerified = true;
+        if (googleProfile.emailVerified) {
+          user.isEmailVerified = true;
+        }
         await user.save();
 
         const token = generateToken(user._id, user.role);
@@ -899,17 +898,31 @@ const googleAuth = async (req, res, next) => {
       }
     }
 
-    // 3. New user — needs mobile verification
+    // 3. New Google user — create account directly without mobile requirement
+    const randomPassword = crypto.randomBytes(32).toString('hex');
+    const emailLower = googleProfile.email ? googleProfile.email.toLowerCase().trim() : undefined;
+
+    user = await User.create({
+      fullName: googleProfile.name || 'Google User',
+      email: emailLower,
+      googleId: googleProfile.googleId,
+      passwordHash: randomPassword,
+      role: 'CUSTOMER',
+      isEmailVerified: Boolean(googleProfile.emailVerified),
+      isMobileVerified: false,
+      isActive: true,
+      authProviders: ['GOOGLE'],
+    });
+
+    const token = generateToken(user._id, user.role);
+    res.cookie('huma_token', token, getCookieOptions(24 * 60 * 60 * 1000));
+
     return res.json({
       success: true,
-      message: 'Mobile verification required to complete registration.',
+      message: 'Google registration and login successful.',
       data: {
-        requiresMobileVerification: true,
-        googleProfile: {
-          googleId: googleProfile.googleId,
-          email: googleProfile.email,
-          name: googleProfile.name,
-        },
+        user: user.toJSON(),
+        token,
       },
     });
   } catch (error) {

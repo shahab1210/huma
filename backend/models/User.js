@@ -11,8 +11,6 @@ const userSchema = new mongoose.Schema(
     },
     mobileNumber: {
       type: String,
-      sparse: true,
-      unique: true,
       trim: true,
       default: undefined,
     },
@@ -20,8 +18,6 @@ const userSchema = new mongoose.Schema(
       type: String,
       trim: true,
       lowercase: true,
-      sparse: true,
-      unique: true,
       default: undefined,
     },
     isEmailVerified: {
@@ -30,8 +26,7 @@ const userSchema = new mongoose.Schema(
     },
     googleId: {
       type: String,
-      sparse: true,
-      unique: true,
+      default: undefined,
     },
     authProviders: {
       type: [String],
@@ -78,6 +73,31 @@ const userSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
+  }
+);
+
+// Partial Unique Indexes: only indexes non-null/string values, allowing multiple users with no mobile/email/googleId
+userSchema.index(
+  { mobileNumber: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { mobileNumber: { $type: 'string' } },
+  }
+);
+
+userSchema.index(
+  { email: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { email: { $type: 'string' } },
+  }
+);
+
+userSchema.index(
+  { googleId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { googleId: { $type: 'string' } },
   }
 );
 

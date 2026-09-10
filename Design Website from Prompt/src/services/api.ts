@@ -10,7 +10,7 @@
 
 const getApiBaseUrl = (): string => {
   const envUrl = (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || "/api").trim();
-  const cleaned = envUrl.replace(/huma-2\.onrender\.com/g, "huma-1.onrender.com").replace(/\/+$/, "");
+  const cleaned = envUrl.replace(/huma[^.]*\.onrender\.com/g, "huma-1.onrender.com").replace(/\/+$/, "");
   if (!cleaned || cleaned === "/api") return "/api";
   return cleaned.endsWith("/api") ? cleaned : `${cleaned}/api`;
 };

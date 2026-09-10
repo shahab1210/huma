@@ -33,7 +33,7 @@ Free cloud hosting platforms (like Render.com or Koyeb.com) spin down/hibernate 
    - **Start Command:** `node server.js`
    - **Instance Type:** `Free`
 5. Under **Environment Variables**, add the variables from your `.env` (including `MONGO_URI`, `JWT_SECRET`, and `CRON_SECRET_KEY`).
-6. Deploy the service. Copy your public backend URL (e.g., `https://huma-backend.onrender.com`).
+6. Deploy the service. Copy your public backend URL (`https://huma-1.onrender.com`).
 
 ---
 

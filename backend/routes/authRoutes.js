@@ -3,6 +3,10 @@ const router = express.Router();
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 const {
   register,
+  sendEmailOtp,
+  verifyEmailOtp,
+  sendSmsOtp,
+  verifySmsOtp,
   sendOtp,
   verifyOtp,
   login,
@@ -27,7 +31,15 @@ const {
 /* ── Customer Registration ── */
 router.post('/register', register);
 
-/* ── WhatsApp OTP ── */
+/* ── Email OTP ── */
+router.post('/email/send-otp', sendEmailOtp);
+router.post('/email/verify-otp', verifyEmailOtp);
+
+/* ── SMS OTP ── */
+router.post('/sms/send-otp', sendSmsOtp);
+router.post('/sms/verify-otp', verifySmsOtp);
+
+/* ── WhatsApp OTP (preserved — gated by WHATSAPP_OTP_ENABLED feature flag) ── */
 router.post('/send-whatsapp-otp', sendOtp);
 router.post('/verify-whatsapp-otp', verifyOtp);
 

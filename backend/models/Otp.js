@@ -1,14 +1,22 @@
 /**
  * @file Otp.js
  * @description Mongoose schema for managing one-time passwords (OTPs).
+ * Supports WhatsApp, Email, and SMS delivery methods.
  */
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
 const otpSchema = new mongoose.Schema({
-  mobileNumber: {
+  // Generic identifier: email address or phone number (+91XXXXXXXXXX)
+  identifier: {
     type: String,
     required: true,
+    index: true,
+  },
+  // DEPRECATED — kept for backward compatibility with existing admin WhatsApp OTP queries
+  // New code should use `identifier` instead
+  mobileNumber: {
+    type: String,
     index: true,
   },
   otpHash: {
@@ -19,6 +27,12 @@ const otpSchema = new mongoose.Schema({
     type: String,
     required: true,
     enum: ['REGISTRATION', 'FORGOT_PASSWORD', 'CHANGE_MOBILE', 'ADMIN_LOGIN', 'ADMIN_UPDATE'],
+  },
+  method: {
+    type: String,
+    required: true,
+    enum: ['WHATSAPP', 'EMAIL', 'SMS'],
+    default: 'WHATSAPP',
   },
   expiresAt: {
     type: Date,
@@ -42,6 +56,8 @@ const otpSchema = new mongoose.Schema({
 });
 
 // Compound index for quick lookups
+otpSchema.index({ identifier: 1, purpose: 1, method: 1, isUsed: 1 });
+// Legacy compound index (for admin WhatsApp OTP backward compatibility)
 otpSchema.index({ mobileNumber: 1, purpose: 1, isUsed: 1 });
 
 /**

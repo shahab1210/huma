@@ -32,7 +32,7 @@ const sendWhatsAppOtp = async (mobileNumber, otpCode) => {
     return { success: true, mock: true };
   }
 
-  const apiVersion = process.env.WHATSAPP_API_VERSION || 'v21.0';
+  const apiVersion = process.env.WHATSAPP_API_VERSION || 'v26.0';
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
   const templateName = process.env.WHATSAPP_OTP_TEMPLATE_NAME || 'huma_otp_verification';
@@ -62,12 +62,12 @@ const sendWhatsAppOtp = async (mobileNumber, otpCode) => {
             },
             {
               type: 'button',
-              sub_type: 'url',
+              sub_type: 'copy_code',
               index: '0',
               parameters: [
                 {
-                  type: 'text',
-                  text: otpCode,
+                  type: 'coupon_code',
+                  coupon_code: otpCode,
                 },
               ],
             },
@@ -107,7 +107,7 @@ const sendTemplateMessage = async (to, templateName, components = []) => {
     return { success: true, mock: true };
   }
 
-  const apiVersion = process.env.WHATSAPP_API_VERSION || 'v21.0';
+  const apiVersion = process.env.WHATSAPP_API_VERSION || 'v26.0';
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
   const url = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`;

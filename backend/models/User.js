@@ -11,15 +11,22 @@ const userSchema = new mongoose.Schema(
     },
     mobileNumber: {
       type: String,
-      required: [true, 'Mobile number is required'],
+      sparse: true,
       unique: true,
       trim: true,
+      default: undefined,
     },
     email: {
       type: String,
       trim: true,
       lowercase: true,
-      default: '',
+      sparse: true,
+      unique: true,
+      default: undefined,
+    },
+    isEmailVerified: {
+      type: Boolean,
+      default: false,
     },
     googleId: {
       type: String,
@@ -31,7 +38,6 @@ const userSchema = new mongoose.Schema(
       enum: ['PASSWORD', 'GOOGLE'],
       default: ['PASSWORD'],
     },
-    // Note: for Google-first registrations, we always collect a password during mobile verification
     passwordHash: {
       type: String,
       required: [true, 'Password is required'],

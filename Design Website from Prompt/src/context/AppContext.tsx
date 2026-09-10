@@ -85,10 +85,14 @@ export interface AppContextType {
   navigate: (view: string) => void;
 
   // Authentication
-  user: { fullName: string; mobileNumber: string; email?: string; authProviders?: string[]; isMobileVerified?: boolean } | null;
+  user: { fullName: string; mobileNumber: string; email?: string; authProviders?: string[]; isMobileVerified?: boolean; isEmailVerified?: boolean } | null;
   adminLoggedIn: boolean;
-  loginCustomer: (mobile: string, pass: string) => Promise<boolean>;
-  registerCustomer: (name: string, mobile: string, pass: string) => Promise<boolean>;
+  loginCustomer: (identifierOrMobile: string, pass: string) => Promise<boolean>;
+  registerCustomer: (
+    nameOrData: string | { fullName: string; mobileNumber?: string; email?: string; password?: string; method?: "email" | "sms" },
+    mobile?: string,
+    pass?: string
+  ) => Promise<boolean>;
   logout: () => void;
   loginAdmin: (user: string, pass: string) => Promise<{ success: boolean; awaitingSecurityAnswer?: boolean; tempToken?: string; question?: string; message?: string }>;
   verifyAdminSecurityAnswer: (tempToken: string, securityAnswer: string) => Promise<boolean>;
@@ -98,11 +102,18 @@ export interface AppContextType {
   verifyAdminCredentialsChange: (updateToken: string, otp: string) => Promise<{ success: boolean; message?: string }>;
   sendWhatsAppOtp: (mobileNumber: string, purpose: string) => Promise<{ success: boolean; message?: string }>;
   verifyWhatsAppOtp: (mobileNumber: string, otp: string, purpose: string) => Promise<{ success: boolean; token?: string; user?: any; message?: string; resetToken?: string }>;
+  sendEmailOtp: (email: string, purpose: string) => Promise<{ success: boolean; message?: string }>;
+  verifyEmailOtp: (email: string, otp: string, purpose: string) => Promise<{ success: boolean; token?: string; user?: any; message?: string; resetToken?: string }>;
+  sendSmsOtp: (mobileNumber: string, purpose: string) => Promise<{ success: boolean; message?: string }>;
+  verifySmsOtp: (mobileNumber: string, otp: string, purpose: string) => Promise<{ success: boolean; token?: string; user?: any; message?: string; resetToken?: string }>;
   googleAuth: (idToken: string) => Promise<{ success: boolean; requiresMobile?: boolean; googleProfile?: any; token?: string; user?: any; message?: string }>;
   completeGoogleRegistration: (data: { idToken: string; mobileNumber: string; password: string; fullName: string }) => Promise<{ success: boolean; message?: string }>;
   linkGoogleAccount: (idToken: string) => Promise<{ success: boolean; user?: any; message?: string }>;
-  forgotPasswordSendOtp: (mobileNumber: string) => Promise<{ success: boolean; message?: string }>;
-  forgotPasswordVerifyOtp: (mobileNumber: string, otp: string) => Promise<{ success: boolean; resetToken?: string; message?: string }>;
+  forgotPasswordSendOtp: (dataOrMobile: string | { email?: string; mobileNumber?: string; method?: "email" | "sms" }) => Promise<{ success: boolean; message?: string }>;
+  forgotPasswordVerifyOtp: (
+    dataOrMobile: string | { email?: string; mobileNumber?: string; otp: string; method?: "email" | "sms" },
+    otp?: string
+  ) => Promise<{ success: boolean; resetToken?: string; message?: string }>;
   resetPassword: (resetToken: string, newPassword: string) => Promise<{ success: boolean; message?: string }>;
 
   // Catalog
@@ -453,21 +464,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   // Customer Authentication API integration
-  const loginCustomer = async (mobile: string, pass: string): Promise<boolean> => {
+  const loginCustomer = async (identifierOrMobile: string, pass: string): Promise<boolean> => {
     try {
+      const isEmail = identifierOrMobile.includes("@");
+      const payload = isEmail
+        ? { email: identifierOrMobile, password: pass }
+        : { mobileNumber: identifierOrMobile, password: pass };
+
       const res = await fetch(`${BASE_URL}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mobileNumber: mobile, password: pass }),
+        body: JSON.stringify(payload),
       });
-      const data = await res.json();
-      if (data.success) {
+      let data: any = null;
+      try {
+        data = await res.json();
+      } catch {
+        data = null;
+      }
+
+      if (res.ok && data?.success) {
         const sessionUser = {
           fullName: data.data.user.fullName,
-          mobileNumber: data.data.user.mobileNumber,
+          mobileNumber: data.data.user.mobileNumber || '',
           email: data.data.user.email || '',
           authProviders: data.data.user.authProviders || ['PASSWORD'],
-          isMobileVerified: data.data.user.isMobileVerified ?? true,
+          isMobileVerified: data.data.user.isMobileVerified ?? false,
+          isEmailVerified: data.data.user.isEmailVerified ?? false,
         };
         setUser(sessionUser);
         localStorage.setItem("huma_user", JSON.stringify(sessionUser));
@@ -475,50 +498,61 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         showToast(`Welcome back, ${data.data.user.fullName}!`);
         return true;
       } else {
-        showToast(data.message || "Invalid mobile number or password", "error");
+        showToast(data?.message || "Invalid credentials", "error");
         return false;
       }
-    } catch (e) {
-      showToast("Failed to connect to server", "error");
+    } catch (e: any) {
+      showToast(e?.message || "Failed to connect to server", "error");
       return false;
     }
   };
 
   const registerCustomer = async (
-    nameOrData: string | { fullName: string; mobileNumber: string; password?: string },
+    nameOrData: string | { fullName: string; mobileNumber?: string; email?: string; password?: string; method?: "email" | "sms" },
     mobile?: string,
     pass?: string
   ): Promise<boolean> => {
-    let nameStr = "";
-    let mobileStr = "";
-    let passStr = "";
+    let payload: any = {};
 
     if (typeof nameOrData === "object" && nameOrData !== null) {
-      nameStr = nameOrData.fullName;
-      mobileStr = nameOrData.mobileNumber;
-      passStr = nameOrData.password || "";
+      payload = {
+        fullName: nameOrData.fullName,
+        email: nameOrData.email,
+        mobileNumber: nameOrData.mobileNumber,
+        password: nameOrData.password || "",
+        method: nameOrData.method || (nameOrData.email ? "email" : "sms"),
+      };
     } else {
-      nameStr = nameOrData;
-      mobileStr = mobile || "";
-      passStr = pass || "";
+      payload = {
+        fullName: nameOrData,
+        mobileNumber: mobile || "",
+        password: pass || "",
+        method: "sms",
+      };
     }
 
     try {
       const res = await fetch(`${BASE_URL}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fullName: nameStr, mobileNumber: mobileStr, password: passStr }),
+        body: JSON.stringify(payload),
       });
-      const data = await res.json();
-      if (data.success) {
-        showToast("Registration successful!");
+      let data: any = null;
+      try {
+        data = await res.json();
+      } catch {
+        data = null;
+      }
+
+      if (res.ok && data?.success) {
+        showToast(data.message || "Registration initiated!");
         return true;
       } else {
-        showToast(data.message || "Registration failed", "error");
+        showToast(data?.message || "Registration failed", "error");
         return false;
       }
-    } catch (e) {
-      showToast("Failed to connect to server", "error");
+    } catch (e: any) {
+      showToast(e?.message || "Failed to connect to server", "error");
       return false;
     }
   };
@@ -720,6 +754,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           email: data.data.user.email || "",
           authProviders: data.data.user.authProviders || ["PASSWORD"],
           isMobileVerified: true,
+          isEmailVerified: data.data.user.isEmailVerified || false,
         };
         setUser(sessionUser);
         localStorage.setItem("huma_user", JSON.stringify(sessionUser));
@@ -737,6 +772,116 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // ── Email OTP Functions ──
+
+  const sendEmailOtp = async (email: string, purpose: string): Promise<{ success: boolean; message?: string }> => {
+    try {
+      const res = await fetch(`${BASE_URL}/auth/email/send-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, purpose }),
+      });
+      let data: any = null;
+      try { data = await res.json(); } catch { data = null; }
+      return { success: !!(res.ok && data?.success), message: data?.message || "Failed to send email OTP" };
+    } catch (e: any) {
+      return { success: false, message: e?.message || "Failed to connect to server" };
+    }
+  };
+
+  const verifyEmailOtp = async (
+    email: string,
+    otp: string,
+    purpose: string
+  ): Promise<{ success: boolean; token?: string; user?: any; message?: string; resetToken?: string }> => {
+    try {
+      const res = await fetch(`${BASE_URL}/auth/email/verify-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, otp, purpose }),
+      });
+      let data: any = null;
+      try { data = await res.json(); } catch { data = null; }
+      if (res.ok && data?.success && data.data?.token) {
+        const sessionUser = {
+          fullName: data.data.user.fullName,
+          mobileNumber: data.data.user.mobileNumber || "",
+          email: data.data.user.email || "",
+          authProviders: data.data.user.authProviders || ["PASSWORD"],
+          isMobileVerified: data.data.user.isMobileVerified || false,
+          isEmailVerified: true,
+        };
+        setUser(sessionUser);
+        localStorage.setItem("huma_user", JSON.stringify(sessionUser));
+        localStorage.setItem("huma_token", data.data.token);
+      }
+      return {
+        success: !!(res.ok && data?.success),
+        token: data?.data?.token,
+        user: data?.data?.user,
+        resetToken: data?.data?.resetToken,
+        message: data?.message || "Invalid verification code",
+      };
+    } catch (e: any) {
+      return { success: false, message: e?.message || "Failed to connect to server" };
+    }
+  };
+
+  // ── SMS OTP Functions ──
+
+  const sendSmsOtp = async (mobileNumber: string, purpose: string): Promise<{ success: boolean; message?: string }> => {
+    try {
+      const res = await fetch(`${BASE_URL}/auth/sms/send-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mobileNumber, purpose }),
+      });
+      let data: any = null;
+      try { data = await res.json(); } catch { data = null; }
+      return { success: !!(res.ok && data?.success), message: data?.message || "Failed to send SMS OTP" };
+    } catch (e: any) {
+      return { success: false, message: e?.message || "Failed to connect to server" };
+    }
+  };
+
+  const verifySmsOtp = async (
+    mobileNumber: string,
+    otp: string,
+    purpose: string
+  ): Promise<{ success: boolean; token?: string; user?: any; message?: string; resetToken?: string }> => {
+    try {
+      const res = await fetch(`${BASE_URL}/auth/sms/verify-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mobileNumber, otp, purpose }),
+      });
+      let data: any = null;
+      try { data = await res.json(); } catch { data = null; }
+      if (res.ok && data?.success && data.data?.token) {
+        const sessionUser = {
+          fullName: data.data.user.fullName,
+          mobileNumber: data.data.user.mobileNumber || "",
+          email: data.data.user.email || "",
+          authProviders: data.data.user.authProviders || ["PASSWORD"],
+          isMobileVerified: true,
+          isEmailVerified: data.data.user.isEmailVerified || false,
+        };
+        setUser(sessionUser);
+        localStorage.setItem("huma_user", JSON.stringify(sessionUser));
+        localStorage.setItem("huma_token", data.data.token);
+      }
+      return {
+        success: !!(res.ok && data?.success),
+        token: data?.data?.token,
+        user: data?.data?.user,
+        resetToken: data?.data?.resetToken,
+        message: data?.message || "Invalid verification code",
+      };
+    } catch (e: any) {
+      return { success: false, message: e?.message || "Failed to connect to server" };
+    }
+  };
+
   // ── Google Authentication Functions ──
 
   const googleAuth = async (
@@ -748,34 +893,36 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ idToken }),
       });
-      const data = await res.json();
-      if (data.success && data.data?.token) {
+      let data: any = null;
+      try { data = await res.json(); } catch { data = null; }
+      if (res.ok && data?.success && data.data?.token) {
         // Existing Google user — auto-login
         const sessionUser = {
           fullName: data.data.user.fullName,
-          mobileNumber: data.data.user.mobileNumber,
+          mobileNumber: data.data.user.mobileNumber || "",
           email: data.data.user.email || "",
           authProviders: data.data.user.authProviders || ["GOOGLE"],
-          isMobileVerified: true,
+          isMobileVerified: data.data.user.isMobileVerified || false,
+          isEmailVerified: data.data.user.isEmailVerified || true,
         };
         setUser(sessionUser);
         localStorage.setItem("huma_user", JSON.stringify(sessionUser));
         localStorage.setItem("huma_token", data.data.token);
       }
       return {
-        success: data.success,
-        requiresMobile: data.data?.requiresMobileVerification,
-        googleProfile: data.data?.googleProfile,
-        token: data.data?.token,
-        user: data.data?.user,
-        message: data.message,
+        success: !!(res.ok && data?.success),
+        requiresMobile: data?.data?.requiresMobileVerification,
+        googleProfile: data?.data?.googleProfile,
+        token: data?.data?.token,
+        user: data?.data?.user,
+        message: data?.message || "Google authentication failed",
       };
-    } catch {
-      return { success: false, message: "Failed to connect to server" };
+    } catch (e: any) {
+      return { success: false, message: e?.message || "Failed to connect to server" };
     }
   };
 
-  const completeGoogleRegistration = async (data: {
+  const completeGoogleRegistration = async (dataPayload: {
     idToken: string;
     mobileNumber: string;
     password: string;
@@ -785,12 +932,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const res = await fetch(`${BASE_URL}/auth/google/complete-registration`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify(dataPayload),
       });
-      const result = await res.json();
-      return { success: result.success, message: result.message };
-    } catch {
-      return { success: false, message: "Failed to connect to server" };
+      let result: any = null;
+      try { result = await res.json(); } catch { result = null; }
+      return { success: !!(res.ok && result?.success), message: result?.message || "Failed to complete Google registration" };
+    } catch (e: any) {
+      return { success: false, message: e?.message || "Failed to connect to server" };
     }
   };
 
@@ -805,54 +953,74 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         },
         body: JSON.stringify({ idToken }),
       });
-      const data = await res.json();
-      if (data.success && data.data?.user) {
+      let data: any = null;
+      try { data = await res.json(); } catch { data = null; }
+      if (res.ok && data?.success && data.data?.user) {
         const sessionUser = {
           fullName: data.data.user.fullName,
           mobileNumber: data.data.user.mobileNumber,
           email: data.data.user.email || "",
           authProviders: data.data.user.authProviders || [],
-          isMobileVerified: true,
+          isMobileVerified: data.data.user.isMobileVerified || false,
+          isEmailVerified: data.data.user.isEmailVerified || false,
         };
         setUser(sessionUser);
         localStorage.setItem("huma_user", JSON.stringify(sessionUser));
       }
-      return { success: data.success, user: data.data?.user, message: data.message };
-    } catch {
-      return { success: false, message: "Failed to connect to server" };
+      return { success: !!(res.ok && data?.success), user: data?.data?.user, message: data?.message || "Failed to link Google account" };
+    } catch (e: any) {
+      return { success: false, message: e?.message || "Failed to connect to server" };
     }
   };
 
   // ── Forgot Password Functions ──
 
-  const forgotPasswordSendOtp = async (mobileNumber: string): Promise<{ success: boolean; message?: string }> => {
+  const forgotPasswordSendOtp = async (
+    dataOrMobile: string | { email?: string; mobileNumber?: string; method?: "email" | "sms" }
+  ): Promise<{ success: boolean; message?: string }> => {
     try {
+      let body: any = {};
+      if (typeof dataOrMobile === "object" && dataOrMobile !== null) {
+        body = dataOrMobile;
+      } else {
+        body = { mobileNumber: dataOrMobile, method: "sms" };
+      }
+
       const res = await fetch(`${BASE_URL}/auth/forgot-password/send-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mobileNumber }),
+        body: JSON.stringify(body),
       });
-      const data = await res.json();
-      return { success: data.success, message: data.message };
-    } catch {
-      return { success: false, message: "Failed to connect to server" };
+      let data: any = null;
+      try { data = await res.json(); } catch { data = null; }
+      return { success: !!(res.ok && data?.success), message: data?.message || "Failed to send reset code" };
+    } catch (e: any) {
+      return { success: false, message: e?.message || "Failed to connect to server" };
     }
   };
 
   const forgotPasswordVerifyOtp = async (
-    mobileNumber: string,
-    otp: string
+    dataOrMobile: string | { email?: string; mobileNumber?: string; otp: string; method?: "email" | "sms" },
+    otpParam?: string
   ): Promise<{ success: boolean; resetToken?: string; message?: string }> => {
     try {
+      let body: any = {};
+      if (typeof dataOrMobile === "object" && dataOrMobile !== null) {
+        body = dataOrMobile;
+      } else {
+        body = { mobileNumber: dataOrMobile, otp: otpParam || "", method: "sms" };
+      }
+
       const res = await fetch(`${BASE_URL}/auth/forgot-password/verify-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mobileNumber, otp }),
+        body: JSON.stringify(body),
       });
-      const data = await res.json();
-      return { success: data.success, resetToken: data.data?.resetToken, message: data.message };
-    } catch {
-      return { success: false, message: "Failed to connect to server" };
+      let data: any = null;
+      try { data = await res.json(); } catch { data = null; }
+      return { success: !!(res.ok && data?.success), resetToken: data?.data?.resetToken, message: data?.message || "Invalid OTP" };
+    } catch (e: any) {
+      return { success: false, message: e?.message || "Failed to connect to server" };
     }
   };
 
@@ -863,10 +1031,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ resetToken, newPassword }),
       });
-      const data = await res.json();
-      return { success: data.success, message: data.message };
+      let data: any = null;
+      try { data = await res.json(); } catch { data = null; }
+      return { success: !!(res.ok && data?.success), message: data?.message || "Failed to reset password" };
+    } catch (e: any) {
+      return { success: false, message: e?.message || "Failed to connect to server" };
+    }
+  };
+
+  // Helper to safely parse JSON without throwing on 502/HTML responses
+  const safeJson = async (res: Response) => {
+    if (!res.ok) return null;
+    try {
+      return await res.json();
     } catch {
-      return { success: false, message: "Failed to connect to server" };
+      return null;
     }
   };
 
@@ -875,48 +1054,48 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const fetchBusinessSettings = async () => {
     try {
       const res = await fetch(`${BASE_URL}/settings`);
-      const data = await res.json();
-      if (data.success && data.data?.settings) {
+      const data = await safeJson(res);
+      if (data?.success && data.data?.settings) {
         setBusinessSettings(data.data.settings);
       }
     } catch (e) {
-      console.error("Failed to fetch settings from backend", e);
+      console.warn("Could not fetch settings from backend; using default settings");
     }
   };
 
   const fetchLocations = async () => {
     try {
       const res = await fetch(`${BASE_URL}/locations`);
-      const data = await res.json();
-      if (data.success) {
+      const data = await safeJson(res);
+      if (data?.success && data.data?.locations) {
         setLocations(data.data.locations);
       }
     } catch (err) {
-      console.error('Failed to fetch locations:', err);
+      console.warn('Could not fetch locations from backend; using fallback locations');
     }
   };
 
   const fetchServiceGroups = async () => {
     try {
       const res = await fetch(`${BASE_URL}/service-groups`);
-      const data = await res.json();
-      if (data.success) {
+      const data = await safeJson(res);
+      if (data?.success && data.data?.serviceGroups) {
         setServiceGroups(data.data.serviceGroups);
       }
     } catch (err) {
-      console.error('Failed to fetch service groups:', err);
+      console.warn('Could not fetch service groups from backend; using fallback groups');
     }
   };
 
   const fetchCategories = async () => {
     try {
       const res = await fetch(`${BASE_URL}/categories`);
-      const data = await res.json();
-      if (data.success && data.data?.categories) {
+      const data = await safeJson(res);
+      if (data?.success && data.data?.categories) {
         setCategories(data.data.categories);
       }
     } catch (err) {
-      console.error('Failed to fetch categories:', err);
+      console.warn('Could not fetch categories from backend; using fallback categories');
     }
   };
 
@@ -926,12 +1105,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         fetch(`${BASE_URL}/services`),
         fetch(`${BASE_URL}/designs`),
       ]);
-      const dataServices = await resServices.json();
-      const dataDesigns = await resDesigns.json();
+      const dataServices = await safeJson(resServices);
+      const dataDesigns = await safeJson(resDesigns);
 
       let merged: Service[] = [];
 
-      if (dataServices.success && dataServices.data?.services) {
+      if (dataServices?.success && dataServices.data?.services) {
         const mappedServices = dataServices.data.services.map((s: any) => ({
           id: s._id,
           type: s.serviceType,
@@ -950,7 +1129,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         merged = [...merged, ...mappedServices];
       }
 
-      if (dataDesigns.success && dataDesigns.data?.designs) {
+      if (dataDesigns?.success && dataDesigns.data?.designs) {
         const mappedDesigns = dataDesigns.data.designs.map((d: any) => ({
           id: d._id,
           type: 'MEHENDI',
@@ -1351,8 +1530,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           localStorage.removeItem("huma_token");
           return;
         }
-        const data = await res.json();
-        if (data.success && data.data?.bookings) {
+        const data = await safeJson(res);
+        if (data?.success && data.data?.bookings) {
           const mapped = data.data.bookings.map((b: any) => ({
             ...b,
             customerName: b.customer?.fullName || "",
@@ -1364,7 +1543,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
       }
     } catch (e) {
-      console.error("Failed to fetch bookings from server", e);
+      console.warn("Could not fetch bookings from server");
     }
   };
 
@@ -1759,6 +1938,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         logoutAdmin,
         sendWhatsAppOtp,
         verifyWhatsAppOtp,
+        sendEmailOtp,
+        verifyEmailOtp,
+        sendSmsOtp,
+        verifySmsOtp,
         googleAuth,
         completeGoogleRegistration,
         linkGoogleAccount,

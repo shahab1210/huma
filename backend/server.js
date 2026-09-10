@@ -81,6 +81,8 @@ const otpLimiter = rateLimit({
   message: { success: false, message: 'Too many OTP requests. Please try again later.' },
 });
 app.use('/api/auth/send-whatsapp-otp', otpLimiter);
+app.use('/api/auth/email/send-otp', otpLimiter);
+app.use('/api/auth/sms/send-otp', otpLimiter);
 app.use('/api/auth/forgot-password/send-otp', otpLimiter);
 
 /* ── Body parsing ── */
@@ -123,7 +125,7 @@ app.use(errorHandler);
 /* ── Start server ── */
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`
 ╔═══════════════════════════════════════════════════╗
 ║   Huma Mehendi & Beauty Artist — API Server       ║
@@ -132,6 +134,14 @@ app.listen(PORT, () => {
 ║   Frontend: ${allowedOrigins.join(', ')}           ║
 ╚═══════════════════════════════════════════════════╝
   `);
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`✕ Port ${PORT} is already in use.`);
+  } else {
+    console.error('Server error:', err);
+  }
 });
 
 const initDB = async () => {

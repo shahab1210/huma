@@ -1,4 +1,4 @@
-import { defineConfig, type HtmlTagDescriptor, type Plugin } from 'vite'
+import { defineConfig, loadEnv, type HtmlTagDescriptor, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'node:path'
@@ -7,6 +7,9 @@ import siteConfiguration from './.figma/make/site.json' with { type: 'json' }
 
 // Vite config — https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+  const backendTarget = env.BACKEND_URL || process.env.BACKEND_URL || (mode === 'development' ? 'http://localhost:5001' : 'https://huma-1.onrender.com')
+
   // .figma/make/deploy-preview passes `--mode development` for cached-preview builds.
   const emitSourcemaps = mode === 'development'
 
@@ -36,8 +39,9 @@ export default defineConfig(({ mode }) => {
       watch: { ignored: ['**/.figma/**'] },
       proxy: {
         '/api': {
-          target: process.env.BACKEND_URL || 'http://localhost:5000',
+          target: backendTarget,
           changeOrigin: true,
+          secure: false,
         },
       },
     },

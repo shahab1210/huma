@@ -13,6 +13,7 @@ router.get('/dashboard', admin.getDashboard);
 router.get('/bookings', admin.getAllBookings);
 router.put('/bookings/:id', admin.updateBooking);
 router.post('/bookings/:id/respond-reschedule', admin.respondReschedule);
+router.post('/bookings/:id/respond-cancellation', admin.respondCancellation);
 
 // Service CRUD
 router.post('/services', admin.createService);

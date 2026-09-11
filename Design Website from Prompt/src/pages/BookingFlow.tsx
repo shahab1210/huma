@@ -32,11 +32,30 @@ export default function BookingFlow() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [latestBooking, setLatestBooking] = useState<any>(null);
 
+  // Helper to sanitize and normalize Indian mobile inputs
+  const sanitizeIndianMobile = (val: string): string => {
+    if (!val) return "";
+    let digits = val.replace(/[\s\-\(\)\.]/g, "");
+    if (digits.startsWith("+91")) {
+      digits = digits.slice(3);
+    } else if (digits.startsWith("91") && digits.length === 12) {
+      digits = digits.slice(2);
+    } else if (digits.startsWith("0") && digits.length === 11) {
+      digits = digits.slice(1);
+    }
+    digits = digits.replace(/\D/g, "");
+    return digits.slice(0, 10);
+  };
+
+  const handleMobileChange = (val: string) => {
+    setCustomerMobile(sanitizeIndianMobile(val));
+  };
+
   // Autofill if user logged in
   useEffect(() => {
     if (user) {
-      setCustomerName(user.fullName);
-      setCustomerMobile(user.mobileNumber);
+      setCustomerName(user.fullName || "");
+      setCustomerMobile(sanitizeIndianMobile(user.mobileNumber || ""));
     }
   }, [user]);
 
@@ -97,12 +116,13 @@ export default function BookingFlow() {
 
   const handleNextDetails = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customerName || !customerMobile || !selectedArea || !address) {
+    if (!customerName.trim() || !customerMobile.trim() || !selectedArea || !address.trim()) {
       showToast("Please fill in all details", "warning");
       return;
     }
-    if (customerMobile.length < 10) {
-      showToast("Please enter a valid mobile number", "warning");
+    const cleanMobile = sanitizeIndianMobile(customerMobile);
+    if (cleanMobile.length !== 10 || !/^[6-9]\d{9}$/.test(cleanMobile)) {
+      showToast("Please enter a valid 10-digit Indian mobile number (starts with 6, 7, 8, or 9)", "warning");
       return;
     }
     setStep("schedule");
@@ -129,15 +149,17 @@ export default function BookingFlow() {
 
     const matchedLoc = locations.find((l) => l.name === selectedArea);
     const locationId = matchedLoc ? matchedLoc._id : undefined;
+    const cleanMobile = sanitizeIndianMobile(customerMobile);
+    const normalizedMobile = `+91${cleanMobile}`;
 
     // Create the pending booking record
     const booking = createBooking({
-      customerName,
-      customerMobile,
+      customerName: customerName.trim(),
+      customerMobile: normalizedMobile,
       items,
       serviceArea: selectedArea,
       locationId,
-      address,
+      address: address.trim(),
       bookingDate: selectedDate,
       timeSlot: selectedSlot,
       subtotal,
@@ -216,17 +238,37 @@ export default function BookingFlow() {
                 />
               </div>
               <div>
-                <label htmlFor="mobile" className="block text-[11px] font-semibold text-gold uppercase tracking-wider">Mobile Number</label>
-                <input
-                  id="mobile"
-                  type="tel"
-                  required
-                  pattern="[0-9]{10}"
-                  placeholder="10-digit mobile number"
-                  value={customerMobile}
-                  onChange={(e) => setCustomerMobile(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-hairline bg-cream/30 px-3 py-2 text-sm text-ink focus:border-gold focus:outline-none"
-                />
+                <label htmlFor="mobile" className="block text-[11px] font-semibold text-gold uppercase tracking-wider">
+                  Mobile Number
+                </label>
+                <div className="mt-1 flex rounded-lg border border-hairline bg-cream/30 focus-within:border-gold focus-within:ring-1 focus-within:ring-gold transition-all overflow-hidden">
+                  <span className="flex items-center gap-1.5 bg-cream/60 px-3 py-2 border-r border-hairline text-xs font-semibold text-slate-700 select-none">
+                    <span role="img" aria-label="India flag">🇮🇳</span>
+                    <span>+91</span>
+                  </span>
+                  <input
+                    id="mobile"
+                    type="tel"
+                    inputMode="numeric"
+                    autoComplete="tel-national"
+                    required
+                    maxLength={10}
+                    placeholder="9876543210"
+                    value={customerMobile}
+                    onChange={(e) => handleMobileChange(e.target.value)}
+                    onPaste={(e) => {
+                      const pasteData = e.clipboardData.getData("text");
+                      if (pasteData) {
+                        e.preventDefault();
+                        handleMobileChange(pasteData);
+                      }
+                    }}
+                    className="w-full bg-transparent px-3 py-2 text-sm text-ink placeholder-slate-400 focus:outline-none"
+                  />
+                </div>
+                <p className="mt-1 text-[10px] text-muted">
+                  10-digit mobile number (starts with 6, 7, 8, or 9)
+                </p>
               </div>
             </div>
 

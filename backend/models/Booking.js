@@ -138,6 +138,7 @@ const bookingSchema = new mongoose.Schema(
         'AWAITING_REMAINING_PAYMENT',
         'IN_PROGRESS',
         'COMPLETED',
+        'CANCELLATION_REQUESTED',
         'CANCELLED',
         'RESCHEDULED',
         'PAYMENT_REJECTED',
@@ -150,6 +151,19 @@ const bookingSchema = new mongoose.Schema(
       enum: ['CUSTOMER', 'ADMIN'],
     },
     cancelledAt: Date,
+    cancellationRequestedAt: Date,
+    cancellationReviewedAt: Date,
+    cancellationReviewedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    },
+    cancellationDecision: {
+      type: String,
+      enum: ['NONE', 'PENDING', 'APPROVED', 'REJECTED'],
+      default: 'NONE',
+    },
+    cancellationRejectionReason: String,
+    previousBookingStatus: String,
     refundAmount: {
       type: Number,
       default: 0,

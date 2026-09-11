@@ -66,6 +66,8 @@ export default function Dashboard() {
     if (bookingFilter === "upcoming") {
       return (
         b.bookingStatus === "CONFIRMED" ||
+        b.bookingStatus === "AWAITING_REMAINING_PAYMENT" ||
+        b.bookingStatus === "CANCELLATION_REQUESTED" ||
         b.bookingStatus === "RESCHEDULED" ||
         b.bookingStatus === "PENDING_PAYMENT" ||
         b.bookingStatus === "PAYMENT_VERIFICATION_PENDING"
@@ -88,6 +90,8 @@ export default function Dashboard() {
         return <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-semibold text-amber-800 uppercase">Pending Payment</span>;
       case "PAYMENT_VERIFICATION_PENDING":
         return <span className="rounded-full bg-gold/15 px-2.5 py-1 text-[10px] font-bold text-gold uppercase border border-gold/25">Verification Pending</span>;
+      case "CANCELLATION_REQUESTED":
+        return <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-bold text-amber-900 uppercase border border-amber-300">Cancellation Requested</span>;
       case "RESCHEDULED":
         return <span className="rounded-full bg-blue-100 px-2.5 py-1 text-[10px] font-semibold text-blue-800 uppercase">Rescheduled</span>;
       case "COMPLETED":
@@ -231,8 +235,8 @@ export default function Dashboard() {
               <div className="space-y-6">
                 {filteredBookings.map((b) => {
                   const itemsList = b.items.map((i) => i.nameSnapshot).join(", ");
-                  const isCancelable = b.bookingStatus !== "CANCELLED" && b.bookingStatus !== "COMPLETED";
-                  const isReschedulable = b.bookingStatus !== "CANCELLED" && b.bookingStatus !== "COMPLETED" && !b.rescheduleRequest;
+                  const isCancelable = b.bookingStatus !== "CANCELLED" && b.bookingStatus !== "COMPLETED" && b.bookingStatus !== "CANCELLATION_REQUESTED";
+                  const isReschedulable = b.bookingStatus !== "CANCELLED" && b.bookingStatus !== "COMPLETED" && b.bookingStatus !== "CANCELLATION_REQUESTED" && !b.rescheduleRequest;
                   const isReviewable = b.bookingStatus === "COMPLETED";
 
                   return (
@@ -298,7 +302,41 @@ export default function Dashboard() {
                         </div>
                       )}
 
-                      {/* Cancellation & Refund details info banner */}
+                      {/* Cancellation Requested Banner */}
+                      {b.bookingStatus === "CANCELLATION_REQUESTED" && (
+                        <div className="rounded-xl bg-amber-50/90 border border-amber-300 p-4 text-xs text-amber-950 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <p className="font-bold uppercase tracking-wider text-[10px] text-amber-950">Cancellation Request Status</p>
+                            <span className="px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-amber-200 text-amber-900 border border-amber-300">
+                              ⏳ Request Sent • Waiting for Approval
+                            </span>
+                          </div>
+                          <p className="font-medium text-amber-900">
+                            Cancellation request sent to admin. Waiting for approval.
+                          </p>
+                          {b.cancellationReason && (
+                            <p className="text-[11px] text-amber-800">
+                              <strong>Reason:</strong> {b.cancellationReason}
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Cancellation Request Rejected Notice */}
+                      {b.cancellationDecision === "REJECTED" && b.bookingStatus !== "CANCELLED" && b.bookingStatus !== "CANCELLATION_REQUESTED" && (
+                        <div className="rounded-xl bg-stone-100 border border-stone-300 p-3 text-xs text-stone-800 space-y-1">
+                          <div className="flex items-center justify-between">
+                            <p className="font-bold text-stone-900 uppercase tracking-wider text-[10px]">Cancellation Request Rejected</p>
+                            <span className="text-[10px] text-stone-600 font-semibold">Booking Active</span>
+                          </div>
+                          <p>Your previous cancellation request was reviewed and rejected by admin. Your booking remains active and confirmed.</p>
+                          {b.cancellationRejectionReason && (
+                            <p className="text-[11px] text-stone-700 italic">Note from Admin: "{b.cancellationRejectionReason}"</p>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Cancellation & Refund details info banner (ONLY if CANCELLED) */}
                       {b.bookingStatus === "CANCELLED" && (
                         <div className="rounded-xl bg-red-50/90 border border-red-200 p-4 text-xs text-red-900 space-y-2">
                           <div className="flex items-center justify-between">
@@ -313,7 +351,7 @@ export default function Dashboard() {
                               {b.refundStatus === "PROCESSED" || b.paymentStatus === "REFUNDED"
                                 ? "✓ Refund Processed"
                                 : b.refundStatus === "PENDING"
-                                ? "⏳ Refund Under Review"
+                                ? "⏳ Refund Pending"
                                 : "Cancelled"}
                             </span>
                           </div>
@@ -356,7 +394,7 @@ export default function Dashboard() {
                               onClick={() => handleCancelClick(b)}
                               className="rounded-md border border-hairline bg-surface px-4 py-2 text-xs font-semibold text-blocked hover:bg-blocked/5 transition-colors"
                             >
-                              Cancel Booking
+                              Cancel Order
                             </button>
                           )}
                           {isReviewable && (

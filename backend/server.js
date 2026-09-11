@@ -77,9 +77,17 @@ app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 
 /* ── Rate limiting ── */
+const isDev = process.env.NODE_ENV !== 'production';
+
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 200, // requests per window
+  max: isDev ? 50000 : 1000, // requests per window
+  skip: (req) => {
+    // In development, skip general rate limiting so local testing is never throttled
+    if (isDev) return true;
+    // In production, skip for admin routes so admin actions aren't throttled
+    return req.path.startsWith('/admin');
+  },
   message: { success: false, message: 'Too many requests. Please try again later.' },
 });
 app.use('/api/', limiter);
@@ -87,7 +95,8 @@ app.use('/api/', limiter);
 // Stricter rate limit for auth routes
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 20,
+  max: isDev ? 1000 : 30,
+  skip: () => isDev,
   message: { success: false, message: 'Too many login attempts. Please try again later.' },
 });
 app.use('/api/auth', authLimiter);
@@ -95,7 +104,7 @@ app.use('/api/auth', authLimiter);
 // Stricter rate limit for OTP endpoints
 const otpLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: isDev ? 200 : 10,
   message: { success: false, message: 'Too many OTP requests. Please try again later.' },
 });
 app.use('/api/auth/send-whatsapp-otp', otpLimiter);

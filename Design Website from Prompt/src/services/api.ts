@@ -12,16 +12,12 @@ const getApiBaseUrl = (): string => {
   const envUrl = (
     import.meta.env.VITE_API_BASE_URL ||
     import.meta.env.VITE_API_URL ||
-    "https://huma-1.onrender.com/api"
+    "/api"
   ).trim();
 
-  // Replace any old/stale backend domains (such as huma-2) with huma-1
-  const cleaned = envUrl
-    .replace(/huma-2\.onrender\.com/g, "huma-1.onrender.com")
-    .replace(/huma[^.]*\.onrender\.com/g, "huma-1.onrender.com")
-    .replace(/\/+$/, "");
+  const cleaned = envUrl.replace(/\/+$/, "");
 
-  if (!cleaned) return "https://huma-1.onrender.com/api";
+  if (!cleaned) return "/api";
   return cleaned.endsWith("/api") ? cleaned : `${cleaned}/api`;
 };
 

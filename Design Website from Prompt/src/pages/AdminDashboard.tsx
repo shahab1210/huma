@@ -32,6 +32,7 @@ export default function AdminDashboard() {
     adminRejectPayment,
     adminPartialPayment,
     adminProcessRefund,
+    adminRespondCancellation,
     setAdminPin,
     verifyAdminPin,
     locations,
@@ -782,12 +783,57 @@ export default function AdminDashboard() {
   }
 
   // Analytics helper variables
-  const activeBookings = bookings.filter((b) => b.bookingStatus !== "CANCELLED");
+  const activeBookings = bookings.filter((b) => b.bookingStatus !== "CANCELLED" && b.bookingStatus !== "CANCELLATION_REQUESTED");
   const salesRevenue = activeBookings.reduce((sum, b) => sum + b.onlineBookingAmount, 0);
   const totalBookingsCount = bookings.length;
   const completedBookingsCount = bookings.filter((b) => b.bookingStatus === "COMPLETED").length;
   const cancelledBookingsCount = bookings.filter((b) => b.bookingStatus === "CANCELLED").length;
   const pendingRescheduleCount = bookings.filter((b) => b.rescheduleRequest && b.rescheduleRequest.status === "PENDING").length;
+  const pendingCancellationCount = bookings.filter((b) => b.bookingStatus === "CANCELLATION_REQUESTED" || b.cancellationDecision === "PENDING").length;
+
+  // Chronological datetime parser for sorting upcoming appointments
+  const parseBookingDateTime = (dateStr: string, timeStr?: string): number => {
+    if (!dateStr) return 0;
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return 0;
+    if (timeStr) {
+      const m = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+      if (m) {
+        let h = parseInt(m[1], 10);
+        const mins = parseInt(m[2], 10);
+        const ampm = m[3] ? m[3].toUpperCase() : "";
+        if (ampm === "PM" && h < 12) h += 12;
+        if (ampm === "AM" && h === 12) h = 0;
+        d.setHours(h, mins, 0, 0);
+        return d.getTime();
+      }
+    }
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  };
+
+  const todayMidnight = new Date();
+  todayMidnight.setHours(0, 0, 0, 0);
+
+  // Filter valid upcoming bookings (Confirmed, In Progress, Rescheduled - exclude Cancelled, Completed, Payment Rejected, and past dates)
+  const upcomingBookings = bookings
+    .filter((b) => {
+      if (
+        b.bookingStatus === "CANCELLED" ||
+        b.bookingStatus === "COMPLETED" ||
+        b.bookingStatus === "PAYMENT_REJECTED" ||
+        b.bookingStatus === "CANCELLATION_REQUESTED"
+      ) {
+        return false;
+      }
+      const bTime = parseBookingDateTime(b.bookingDate, b.timeSlot);
+      return bTime >= todayMidnight.getTime();
+    })
+    .sort((a, b) => {
+      const timeA = parseBookingDateTime(a.bookingDate, a.timeSlot);
+      const timeB = parseBookingDateTime(b.bookingDate, b.timeSlot);
+      return timeA - timeB;
+    });
 
   return (
     <div className="mx-auto max-w-6xl px-5 py-24 lg:px-8">
@@ -868,7 +914,7 @@ export default function AdminDashboard() {
               <div className="rounded-xl border border-hairline bg-surface p-5">
                 <p className="text-[10px] font-semibold text-gold uppercase tracking-wider">Alerts &amp; Cancellations</p>
                 <p className="font-display text-3xl text-blocked mt-2 font-semibold">{cancelledBookingsCount}</p>
-                <p className="text-[10px] text-muted mt-1">{pendingRescheduleCount} reschedule requests pending</p>
+                <p className="text-[10px] text-muted mt-1">{pendingRescheduleCount} reschedule, {pendingCancellationCount} cancel pending</p>
               </div>
             </div>
 
@@ -887,6 +933,159 @@ export default function AdminDashboard() {
                 </button>
               </div>
             )}
+
+            {pendingCancellationCount > 0 && (
+              <div className="rounded-xl border border-amber-300 bg-amber-50/70 p-5 flex items-center justify-between">
+                <div className="text-sm text-amber-950">
+                  <strong>Pending Cancellations:</strong> You have {pendingCancellationCount} customer cancellation request(s) awaiting your review.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("bookings")}
+                  className="rounded bg-amber-700 px-4 py-2 text-xs font-semibold text-white hover:bg-amber-800 shadow-sm"
+                >
+                  Review Cancellations
+                </button>
+              </div>
+            )}
+
+            {/* UPCOMING BOOKINGS CARD / SECTION */}
+            <div className="rounded-2xl border border-hairline bg-surface p-6 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-hairline pb-3">
+                <div>
+                  <h3 className="font-display text-xl text-brand font-semibold flex items-center gap-2">
+                    Upcoming Appointments
+                    <span className="rounded-full bg-brand/10 text-brand text-xs px-2.5 py-0.5 font-sans font-bold">
+                      {upcomingBookings.length}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-muted mt-0.5">Chronologically sorted appointments scheduled for today and upcoming dates</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("bookings")}
+                  className="text-xs text-brand font-semibold hover:text-gold transition-colors flex items-center gap-1"
+                >
+                  View All in Bookings Masterlist →
+                </button>
+              </div>
+
+              {upcomingBookings.length === 0 ? (
+                <div className="py-8 text-center text-muted">
+                  <div className="w-12 h-12 mx-auto rounded-full bg-cream/60 flex items-center justify-center text-muted text-xl mb-2">
+                    📅
+                  </div>
+                  <p className="font-medium text-sm text-brand">No upcoming appointments scheduled</p>
+                  <p className="text-xs text-muted mt-1">Confirmed appointments for future dates will appear here in chronological order.</p>
+                </div>
+              ) : (
+                <div className="grid gap-4 md:grid-cols-2">
+                  {upcomingBookings.map((b) => {
+                    const servicesList = b.items.map((i) => i.nameSnapshot).join(", ");
+                    const cleanPhone = b.customerMobile.replace(/^\+91/, "").replace(/^0/, "");
+                    const isToday = new Date(b.bookingDate).toDateString() === new Date().toDateString();
+
+                    return (
+                      <div
+                        key={b.bookingId}
+                        className="rounded-xl border border-hairline bg-cream/20 p-4 hover:border-gold/50 transition-all flex flex-col justify-between space-y-3"
+                      >
+                        <div className="space-y-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-display text-base font-bold text-brand">
+                                  {b.customerName}
+                                </span>
+                                {isToday && (
+                                  <span className="rounded bg-rose-100 text-rose-800 text-[10px] font-bold px-1.5 py-0.5 uppercase tracking-wide">
+                                    Today
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-muted mt-0.5">
+                                ID: <span className="font-mono font-semibold text-brand">{b.bookingId}</span>
+                              </p>
+                            </div>
+                            <span className={`inline-block text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider ${
+                              b.bookingStatus === "CONFIRMED"
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                : b.bookingStatus === "RESCHEDULED"
+                                ? "bg-blue-50 text-blue-700 border border-blue-200"
+                                : b.bookingStatus === "IN_PROGRESS"
+                                ? "bg-purple-50 text-purple-700 border border-purple-200"
+                                : "bg-amber-50 text-amber-700 border border-amber-200"
+                            }`}>
+                              {b.bookingStatus.replace("_", " ")}
+                            </span>
+                          </div>
+
+                          <div className="rounded-lg bg-surface p-3 text-xs space-y-1.5 border border-hairline/60">
+                            <div className="flex items-center gap-2 text-brand font-medium">
+                              <span className="text-gold">🗓</span>
+                              <span>{b.bookingDate}</span>
+                              <span className="text-muted">•</span>
+                              <span className="text-gold">⏰</span>
+                              <span>{b.timeSlot}</span>
+                            </div>
+                            <div className="flex items-start gap-2 text-muted">
+                              <span className="text-gold">📍</span>
+                              <span className="text-slate-700">{b.serviceArea || "Service Area"}: {b.address}</span>
+                            </div>
+                            <div className="flex items-start gap-2 text-muted">
+                              <span className="text-gold">✨</span>
+                              <span className="text-slate-800 font-medium">{servicesList || "Custom blocked Slot"}</span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between text-xs pt-1">
+                            <div>
+                              <span className="text-muted">Total: </span>
+                              <span className="font-bold text-brand">₹{b.totalAmount.toLocaleString("en-IN")}</span>
+                              {b.remainingAmount > 0 && (
+                                <span className="text-rose-600 text-[11px] ml-2 font-medium">
+                                  (Due: ₹{b.remainingAmount.toLocaleString("en-IN")})
+                                </span>
+                              )}
+                            </div>
+                            <span className={`text-[11px] font-semibold ${
+                              b.paymentStatus === "CONFIRMED" ? "text-emerald-600" : "text-amber-600"
+                            }`}>
+                              {b.paymentStatus}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Quick action buttons */}
+                        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-hairline/60">
+                          <a
+                            href={`tel:${cleanPhone}`}
+                            className="inline-flex items-center gap-1 rounded border border-hairline bg-white px-2.5 py-1 text-xs font-semibold text-brand hover:bg-cream/50 transition-colors"
+                          >
+                            📞 Call
+                          </a>
+                          <a
+                            href={`https://wa.me/91${cleanPhone}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 rounded bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors"
+                          >
+                            💬 WhatsApp
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab("bookings")}
+                            className="inline-flex items-center gap-1 rounded border border-hairline bg-white px-2.5 py-1 text-xs font-semibold text-muted hover:text-brand hover:bg-cream/50 transition-colors ml-auto"
+                          >
+                            Details & Status →
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
 
             {/* Recent Bookings Overview List */}
             <div className="rounded-2xl border border-hairline bg-surface p-6 space-y-4">
@@ -945,6 +1144,7 @@ export default function AdminDashboard() {
                           >
                             <option value="PENDING_PAYMENT">Pending Payment</option>
                             <option value="CONFIRMED">Confirmed</option>
+                            <option value="CANCELLATION_REQUESTED">Cancellation Requested</option>
                             <option value="RESCHEDULED">Rescheduled</option>
                             <option value="IN_PROGRESS">In Progress</option>
                             <option value="COMPLETED">Completed</option>
@@ -998,6 +1198,66 @@ export default function AdminDashboard() {
                               Reject
                             </button>
                           </div>
+                        </div>
+                      )}
+
+                      {/* Cancellation Requests handler */}
+                      {(b.bookingStatus === "CANCELLATION_REQUESTED" || b.cancellationDecision === "PENDING") && (
+                        <div className="rounded-xl border border-amber-300 bg-amber-50/80 p-4 flex flex-col sm:flex-row justify-between gap-3 text-xs">
+                          <div>
+                            <strong className="text-amber-950 flex items-center gap-1.5 font-bold">
+                              <span className="inline-block w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                              Cancellation Requested by Customer:
+                            </strong>
+                            <p className="mt-1 text-slate-800">
+                              Reason: <span className="font-medium italic">"{b.cancellationReason || "No reason specified"}"</span>
+                            </p>
+                            {b.cancellationRefundUpi && (
+                              <p className="mt-1 text-slate-700">
+                                Refund UPI ID: <span className="font-mono font-semibold text-slate-900 bg-amber-100 px-1.5 py-0.5 rounded">{b.cancellationRefundUpi}</span>
+                              </p>
+                            )}
+                            <p className="mt-1 text-slate-500 text-[11px]">
+                              Requested: {b.cancellationRequestedAt ? new Date(b.cancellationRequestedAt).toLocaleString() : "Recently"}
+                            </p>
+                          </div>
+                          <div className="flex gap-2 self-end sm:self-center">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (window.confirm(`Approve cancellation for booking ${b.bookingId}?\n\nThis will mark the booking as CANCELLED, calculate refund due, and release the reserved time slot.`)) {
+                                  adminRespondCancellation(b.bookingId, true);
+                                }
+                              }}
+                              className="rounded bg-emerald-600 px-3 py-1.5 font-semibold text-white hover:bg-emerald-700 shadow-sm"
+                            >
+                              Approve Cancellation
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const reason = window.prompt("Enter rejection reason for customer:", "Cancellation request cannot be accommodated as per booking cancellation policy.");
+                                if (reason !== null) {
+                                  adminRespondCancellation(b.bookingId, false, reason);
+                                }
+                              }}
+                              className="rounded bg-rose-600 px-3 py-1.5 font-semibold text-white hover:bg-rose-700 shadow-sm"
+                            >
+                              Reject Cancellation
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Cancellation Decision Notice if Rejected */}
+                      {b.cancellationDecision === "REJECTED" && (
+                        <div className="rounded-xl border border-rose-200 bg-rose-50/60 p-3 text-xs text-rose-900">
+                          <p>
+                            <strong>Cancellation Rejected:</strong> {b.cancellationRejectionReason || "Request declined by admin."}
+                            {b.cancellationReviewedAt && (
+                              <span className="text-[11px] text-rose-600 ml-2">({new Date(b.cancellationReviewedAt).toLocaleString()})</span>
+                            )}
+                          </p>
                         </div>
                       )}
                     </div>

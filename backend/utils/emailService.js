@@ -102,7 +102,7 @@ const sendOTPEmail = async (email, otpCode) => {
 
   // If no email delivery credentials are set, fail immediately
   if (!hasGmailConfig && !hasResendConfig) {
-    const errorMsg = 'Email service is not configured. Please set EMAIL_USER and EMAIL_APP_PASSWORD in environment variables.';
+    const errorMsg = 'Email service is not configured. Please set RESEND_API_KEY or EMAIL_USER and EMAIL_APP_PASSWORD in environment variables.';
     console.error(`✕ ${errorMsg}`);
     throw new Error(errorMsg);
   }

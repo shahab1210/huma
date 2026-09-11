@@ -232,7 +232,7 @@ const getBookingById = async (req, res, next) => {
 
 /**
  * POST /api/bookings/:id/cancel
- * Customer-initiated cancellation
+ * Customer-initiated cancellation request (requires admin approval)
  */
 const cancelBooking = async (req, res, next) => {
   try {
@@ -252,64 +252,24 @@ const cancelBooking = async (req, res, next) => {
       throw new ApiError(400, `Cannot cancel a ${booking.bookingStatus.toLowerCase()} booking.`);
     }
 
-    const settings = (await BusinessSettings.findOne()) || {
-      cancellationCharge: 500,
-      cancellationWindowDays: 5,
-    };
-
-    // Calculate refund
-    const daysUntilAppointment = Math.ceil(
-      (new Date(booking.bookingDate) - new Date()) / (1000 * 60 * 60 * 24)
-    );
-
-    let refundAmount = 0;
-    if (daysUntilAppointment <= settings.cancellationWindowDays) {
-      // Within cancellation window — generally non-refundable
-      refundAmount = 0;
-    } else {
-      // Apply cancellation charge
-      refundAmount = Math.max(0, booking.paidAmount - settings.cancellationCharge);
+    if (booking.bookingStatus === 'CANCELLATION_REQUESTED') {
+      throw new ApiError(400, 'A cancellation request is already pending admin approval.');
     }
 
-    booking.bookingStatus = 'CANCELLED';
+    // Customer cancellation is ALWAYS a request for admin approval
+    booking.previousBookingStatus = booking.bookingStatus;
+    booking.bookingStatus = 'CANCELLATION_REQUESTED';
     booking.cancellationReason = req.body.reason || 'Customer requested cancellation';
-    booking.cancelledBy = 'CUSTOMER';
-    booking.cancelledAt = new Date();
-    booking.refundAmount = refundAmount;
+    booking.cancellationRequestedAt = new Date();
+    booking.cancellationDecision = 'PENDING';
     if (req.body.customerUpiId) booking.customerUpiId = req.body.customerUpiId;
     if (req.body.customerUpiName) booking.customerUpiName = req.body.customerUpiName;
 
-    // Update paymentStatus so it does not remain pending verification
-    if (booking.paymentStatus === 'PAYMENT_VERIFICATION_PENDING' || booking.paidAmount > 0) {
-      booking.refundStatus = 'PENDING';
-      booking.paymentStatus = refundAmount > 0 ? 'REFUNDED' : 'REJECTED';
-    } else {
-      booking.paymentStatus = 'REJECTED';
-    }
-
     await booking.save();
-
-    // Update associated Payment document
-    const Payment = require('../models/Payment');
-    await Payment.updateMany(
-      { booking: booking._id },
-      { status: 'REJECTED', adminNote: 'Booking cancelled by customer' }
-    );
-
-    // Release the time slot
-    if (booking.timeSlotId) {
-      await TimeSlot.findByIdAndUpdate(booking.timeSlotId, {
-        status: 'AVAILABLE',
-        booking: null,
-        reservedBy: null,
-        reservedAt: null,
-        reservationExpiry: null,
-      });
-    }
 
     res.json({
       success: true,
-      message: `Booking cancelled.${refundAmount > 0 ? ` Refund of ₹${refundAmount} will be processed.` : ' No refund applicable.'}`,
+      message: 'Cancellation request sent to admin. Waiting for approval.',
       data: { booking },
     });
   } catch (error) {

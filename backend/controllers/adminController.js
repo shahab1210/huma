@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Booking = require('../models/Booking');
 const Service = require('../models/Service');
 const Design = require('../models/Design');
@@ -256,6 +257,114 @@ const respondReschedule = async (req, res, next) => {
     res.json({
       success: true,
       message: `Reschedule request ${decision.toLowerCase()}.`,
+      data: { booking },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * POST /api/admin/bookings/:id/respond-cancellation
+ * Admin approves or rejects a customer's cancellation request
+ */
+const respondCancellation = async (req, res, next) => {
+  try {
+    const { decision, rejectionReason } = req.body;
+    if (!['APPROVED', 'REJECTED'].includes(decision)) {
+      throw new ApiError(400, 'Decision must be APPROVED or REJECTED.');
+    }
+
+    const booking = await Booking.findOne({
+      $or: [
+        mongoose.Types.ObjectId.isValid(req.params.id) ? { _id: req.params.id } : null,
+        { bookingId: req.params.id },
+      ].filter(Boolean),
+    });
+    if (!booking) throw new ApiError(404, 'Booking not found.');
+
+    booking.cancellationReviewedAt = new Date();
+    booking.cancellationReviewedBy = req.user ? req.user._id : null;
+    booking.cancellationDecision = decision;
+
+    if (decision === 'APPROVED') {
+      booking.bookingStatus = 'CANCELLED';
+      booking.cancelledBy = 'CUSTOMER';
+      booking.cancelledAt = new Date();
+
+      // Calculate refund based on business settings
+      let cancellationCharge = 500;
+      let cancellationWindowDays = 5;
+      try {
+        const settings = await BusinessSettings.findOne();
+        if (settings) {
+          cancellationCharge = settings.cancellationCharge ?? 500;
+          cancellationWindowDays = settings.cancellationWindowDays ?? 5;
+        }
+      } catch (settingsErr) {
+        console.warn('Could not load BusinessSettings for cancellation:', settingsErr.message);
+      }
+
+      let daysUntilAppointment = 0;
+      if (booking.bookingDate) {
+        const apptDate = new Date(booking.bookingDate);
+        if (!isNaN(apptDate.getTime())) {
+          daysUntilAppointment = Math.ceil(
+            (apptDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+          );
+        }
+      }
+
+      let refundAmount = 0;
+      const paid = booking.paidAmount || 0;
+      if (daysUntilAppointment <= cancellationWindowDays) {
+        refundAmount = 0;
+      } else {
+        refundAmount = Math.max(0, paid - cancellationCharge);
+      }
+      booking.refundAmount = refundAmount;
+
+      if (paid > 0) {
+        booking.refundStatus = 'PENDING';
+      } else {
+        booking.refundStatus = 'NONE';
+      }
+
+      // Update associated Payment documents
+      try {
+        await Payment.updateMany(
+          { booking: booking._id },
+          { status: 'REJECTED', adminNote: 'Booking cancelled by customer (Approved by admin)' }
+        );
+      } catch (pmtErr) {
+        console.error('Error updating payments on cancellation approval:', pmtErr.message);
+      }
+
+      // Release time slot
+      if (booking.timeSlotId) {
+        try {
+          await TimeSlot.findByIdAndUpdate(booking.timeSlotId, {
+            status: 'AVAILABLE',
+            booking: null,
+            reservedBy: null,
+            reservedAt: null,
+            reservationExpiry: null,
+          });
+        } catch (slotErr) {
+          console.error('Error releasing slot on cancellation approval:', slotErr.message);
+        }
+      }
+    } else {
+      // Restore previous booking status
+      booking.bookingStatus = booking.previousBookingStatus || 'CONFIRMED';
+      booking.cancellationRejectionReason = rejectionReason || 'Cancellation request rejected by admin';
+    }
+
+    await booking.save();
+
+    res.json({
+      success: true,
+      message: decision === 'APPROVED' ? 'Booking cancellation approved.' : 'Booking cancellation rejected. Booking remains active.',
       data: { booking },
     });
   } catch (error) {
@@ -687,6 +796,7 @@ module.exports = {
   getAllBookings,
   updateBooking,
   respondReschedule,
+  respondCancellation,
   createService,
   updateService,
   deleteService,

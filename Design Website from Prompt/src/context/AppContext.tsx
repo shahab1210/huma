@@ -31,9 +31,14 @@ export interface Booking {
   paidAmount: number;
   remainingAmount: number;
   paymentStatus: "PENDING" | "PAYMENT_VERIFICATION_PENDING" | "BOOKED_AMOUNT_PAID" | "PARTIAL_PAYMENT" | "FAILED" | "REFUNDED" | "REJECTED";
-  bookingStatus: "PENDING_PAYMENT" | "PAYMENT_VERIFICATION_PENDING" | "CONFIRMED" | "AWAITING_REMAINING_PAYMENT" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | "RESCHEDULED" | "PAYMENT_REJECTED";
+  bookingStatus: "PENDING_PAYMENT" | "PAYMENT_VERIFICATION_PENDING" | "CONFIRMED" | "AWAITING_REMAINING_PAYMENT" | "IN_PROGRESS" | "COMPLETED" | "CANCELLATION_REQUESTED" | "CANCELLED" | "RESCHEDULED" | "PAYMENT_REJECTED";
   cancellationReason?: string;
   cancelledBy?: "CUSTOMER" | "ADMIN";
+  cancellationRequestedAt?: string;
+  cancellationReviewedAt?: string;
+  cancellationDecision?: "NONE" | "PENDING" | "APPROVED" | "REJECTED";
+  cancellationRejectionReason?: string;
+  previousBookingStatus?: string;
   paymentMethod?: "RAZORPAY" | "UPI_MANUAL";
   transactionId?: string;
   paymentScreenshot?: string;
@@ -140,6 +145,7 @@ export interface AppContextType {
   cancelBooking: (bookingId: string, reason: string, isCustomer: boolean, customerUpiId?: string, customerUpiName?: string) => Promise<{ success: boolean; message?: string }>;
   requestReschedule: (bookingId: string, date: string, slot: string, reason: string) => void;
   respondToReschedule: (bookingId: string, approve: boolean) => void;
+  adminRespondCancellation: (bookingId: string, approve: boolean, rejectionReason?: string) => Promise<{ success: boolean; message?: string }>;
   updateBookingStatus: (bookingId: string, status: Booking["bookingStatus"]) => void;
   fetchMyBookings: () => Promise<void>;
 
@@ -307,6 +313,44 @@ const INITIAL_REVIEWS: Review[] = [
 
 const DEFAULT_SLOTS = ["10:00 AM", "11:30 AM", "01:00 PM", "02:30 PM", "04:00 PM", "05:30 PM", "07:00 PM", "08:30 PM", "10:00 PM"];
 
+// Sanitize bookings so heavy base64 strings or images don't overflow localStorage (5MB browser limit)
+const sanitizeBookingsForStorage = (bookingsList: Booking[]): Booking[] => {
+  if (!Array.isArray(bookingsList)) return [];
+  return bookingsList.slice(0, 30).map((b) => {
+    // If paymentScreenshot is a large base64 data URI (> 500 chars), omit it from localStorage
+    if (b.paymentScreenshot && b.paymentScreenshot.length > 500) {
+      const { paymentScreenshot, ...rest } = b;
+      return rest as Booking;
+    }
+    return b;
+  });
+};
+
+// Safely write to localStorage with quota-exceeded handling to avoid crashing the app
+const safeSetLocalStorage = (key: string, value: string) => {
+  try {
+    localStorage.setItem(key, value);
+  } catch (err: any) {
+    console.warn(`[Storage] Failed to save "${key}" to localStorage:`, err?.message || err);
+    try {
+      if (key === "huma_bookings") {
+        const parsed = JSON.parse(value);
+        if (Array.isArray(parsed)) {
+          // Strip paymentScreenshot and keep only 10 most recent bookings
+          const stripped = parsed.slice(0, 10).map(({ paymentScreenshot, ...rest }: any) => rest);
+          localStorage.setItem(key, JSON.stringify(stripped));
+          return;
+        }
+      }
+      // Clear oversized bookings cache to free up browser storage quota
+      localStorage.removeItem("huma_bookings");
+      localStorage.setItem(key, value);
+    } catch {
+      // In-memory state remains active; prevent application crash
+    }
+  }
+};
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
 // Navigation
   const [currentView, setCurrentView] = useState("home");
@@ -374,24 +418,47 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     const storedServices = localStorage.getItem("huma_services");
     if (storedServices) {
-      setServices(JSON.parse(storedServices));
+      try {
+        setServices(JSON.parse(storedServices));
+      } catch {
+        setServices(INITIAL_SERVICES);
+      }
     } else {
       setServices(INITIAL_SERVICES);
-      localStorage.setItem("huma_services", JSON.stringify(INITIAL_SERVICES));
+      safeSetLocalStorage("huma_services", JSON.stringify(INITIAL_SERVICES));
     }
 
     const storedCart = localStorage.getItem("huma_cart");
-    if (storedCart) setCart(JSON.parse(storedCart));
+    if (storedCart) {
+      try {
+        setCart(JSON.parse(storedCart));
+      } catch {}
+    }
 
     const storedBookings = localStorage.getItem("huma_bookings");
-    if (storedBookings) setBookings(JSON.parse(storedBookings));
+    if (storedBookings) {
+      try {
+        const parsed = JSON.parse(storedBookings);
+        if (Array.isArray(parsed)) {
+          setBookings(parsed);
+          // Sanitize any existing large base64 blobs from storage to immediately free quota
+          safeSetLocalStorage("huma_bookings", JSON.stringify(sanitizeBookingsForStorage(parsed)));
+        }
+      } catch {
+        try { localStorage.removeItem("huma_bookings"); } catch {}
+      }
+    }
 
     const storedReviews = localStorage.getItem("huma_reviews");
     if (storedReviews) {
-      setReviews(JSON.parse(storedReviews));
+      try {
+        setReviews(JSON.parse(storedReviews));
+      } catch {
+        setReviews(INITIAL_REVIEWS);
+      }
     } else {
       setReviews(INITIAL_REVIEWS);
-      localStorage.setItem("huma_reviews", JSON.stringify(INITIAL_REVIEWS));
+      safeSetLocalStorage("huma_reviews", JSON.stringify(INITIAL_REVIEWS));
     }
 
     const storedBlockedDates = localStorage.getItem("huma_blocked_dates");
@@ -422,34 +489,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (selectedLocation) {
-      localStorage.setItem('huma_selected_location', JSON.stringify(selectedLocation));
+      safeSetLocalStorage('huma_selected_location', JSON.stringify(selectedLocation));
     }
   }, [selectedLocation]);
 
-  // Sync states to local storage
+  // Sync states to local storage safely
   const saveServices = (newServices: Service[]) => {
     setServices(newServices);
-    localStorage.setItem("huma_services", JSON.stringify(newServices));
+    safeSetLocalStorage("huma_services", JSON.stringify(newServices));
   };
 
   const saveCart = (newCart: Service[]) => {
     setCart(newCart);
-    localStorage.setItem("huma_cart", JSON.stringify(newCart));
+    safeSetLocalStorage("huma_cart", JSON.stringify(newCart));
   };
 
   const saveBookings = (newBookings: Booking[]) => {
     setBookings(newBookings);
-    localStorage.setItem("huma_bookings", JSON.stringify(newBookings));
+    safeSetLocalStorage("huma_bookings", JSON.stringify(sanitizeBookingsForStorage(newBookings)));
   };
 
   const saveReviews = (newReviews: Review[]) => {
     setReviews(newReviews);
-    localStorage.setItem("huma_reviews", JSON.stringify(newReviews));
+    safeSetLocalStorage("huma_reviews", JSON.stringify(newReviews));
   };
 
   const saveBlockedDates = (dates: string[]) => {
     setBlockedDates(dates);
-    localStorage.setItem("huma_blocked_dates", JSON.stringify(dates));
+    safeSetLocalStorage("huma_blocked_dates", JSON.stringify(dates));
   };
 
   // Toast Utility
@@ -1220,8 +1287,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
           return b;
         });
-        setBookings(updated);
-        localStorage.setItem("huma_bookings", JSON.stringify(updated));
+        saveBookings(updated);
         clearCart();
         return { success: true };
       } else {
@@ -1261,8 +1327,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
           return b;
         });
-        setBookings(updated);
-        localStorage.setItem("huma_bookings", JSON.stringify(updated));
+        saveBookings(updated);
         return { success: true };
       } else {
         return { success: false, message: data.message || "Failed to verify payment" };
@@ -1304,8 +1369,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
           return b;
         });
-        setBookings(updated);
-        localStorage.setItem("huma_bookings", JSON.stringify(updated));
+        saveBookings(updated);
         return { success: true };
       } else {
         return { success: false, message: data.message || "Failed to reject payment" };
@@ -1346,8 +1410,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
           return b;
         });
-        setBookings(updated);
-        localStorage.setItem("huma_bookings", JSON.stringify(updated));
+        saveBookings(updated);
         return { success: true, message: data.message };
       } else {
         return { success: false, message: data.message || "Failed to process partial payment" };
@@ -1394,8 +1457,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
           return b;
         });
-        setBookings(updated);
-        localStorage.setItem("huma_bookings", JSON.stringify(updated));
+        saveBookings(updated);
         return { success: true, message: data.message };
       } else {
         return { success: false, message: data.message || "Failed to process refund" };
@@ -1515,8 +1577,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             customerMobile: b.customer?.mobileNumber || "",
             bookingDate: b.bookingDate ? new Date(b.bookingDate).toISOString().split('T')[0] : "",
           }));
-          setBookings(mapped);
-          localStorage.setItem("huma_bookings", JSON.stringify(mapped));
+          saveBookings(mapped);
         }
       } else if (user && customerToken) {
         const res = await fetch(`${BASE_URL}/bookings`, {
@@ -1538,12 +1599,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             customerMobile: b.customer?.mobileNumber || "",
             bookingDate: b.bookingDate ? new Date(b.bookingDate).toISOString().split('T')[0] : "",
           }));
-          setBookings(mapped);
-          localStorage.setItem("huma_bookings", JSON.stringify(mapped));
+          saveBookings(mapped);
         }
       }
     } catch (e) {
-      console.warn("Could not fetch bookings from server");
+      console.warn("Could not fetch bookings from server", e);
     }
   };
 
@@ -1590,49 +1650,99 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       });
       const data = await res.json();
 
+      if (!data.success) {
+        showToast(data.message || "Failed to submit cancellation request", "error");
+        return { success: false, message: data.message };
+      }
+
+      const bkData = data.data?.booking;
       const updated = bookings.map((b) => {
         if (b.bookingId === bookingId || (b as any)._id === targetId) {
-          const bkData = data.data?.booking;
           return {
             ...b,
-            bookingStatus: "CANCELLED" as const,
-            paymentStatus: (bkData?.paymentStatus || "REFUNDED") as any,
-            refundStatus: (bkData?.refundStatus || "PENDING") as any,
-            refundAmount: bkData?.refundAmount ?? 0,
+            bookingStatus: (bkData?.bookingStatus || "CANCELLATION_REQUESTED") as any,
             cancellationReason: reason,
-            cancelledBy: isCustomer ? ("CUSTOMER" as const) : ("ADMIN" as const),
+            cancellationRequestedAt: bkData?.cancellationRequestedAt || new Date().toISOString(),
+            cancellationDecision: (bkData?.cancellationDecision || "PENDING") as any,
             customerUpiId: customerUpiId || bkData?.customerUpiId || b.customerUpiId,
             customerUpiName: customerUpiName || bkData?.customerUpiName || b.customerUpiName,
           };
         }
         return b;
       });
-      setBookings(updated);
-      localStorage.setItem("huma_bookings", JSON.stringify(updated));
-      showToast(data.message || "Booking cancelled successfully.");
-      return { success: data.success ?? true, message: data.message };
+      saveBookings(updated);
+      showToast(data.message || "Cancellation request sent to admin. Waiting for approval.");
+      return { success: true, message: data.message };
     } catch {
+      showToast("Failed to connect to server", "error");
+      return { success: false, message: "Failed to connect to server" };
+    } finally {
+      setLoading('cancelBooking', false);
+    }
+  };
+
+  const adminRespondCancellation = async (
+    bookingId: string,
+    approve: boolean,
+    rejectionReason?: string
+  ): Promise<{ success: boolean; message?: string }> => {
+    try {
+      setLoading('adminRespondCancellation', true);
+      const token = localStorage.getItem("huma_admin_token");
+      const bObj = bookings.find((b) => b.bookingId === bookingId || (b as any)._id === bookingId);
+      const targetId = (bObj as any)?._id || bookingId;
+
+      const res = await fetch(`${BASE_URL}/admin/bookings/${targetId}/respond-cancellation`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          decision: approve ? "APPROVED" : "REJECTED",
+          rejectionReason,
+        }),
+      });
+      const data = await res.json();
+
+      if (!data.success) {
+        showToast(data.message || "Failed to process cancellation response", "error");
+        return { success: false, message: data.message };
+      }
+
+      const bkData = data.data?.booking;
       const updated = bookings.map((b) => {
-        if (b.bookingId === bookingId) {
-          return {
-            ...b,
-            bookingStatus: "CANCELLED" as const,
-            paymentStatus: "REFUNDED" as const,
-            refundStatus: "PENDING" as const,
-            cancellationReason: reason,
-            cancelledBy: isCustomer ? ("CUSTOMER" as const) : ("ADMIN" as const),
-            customerUpiId,
-            customerUpiName,
-          };
+        if (b.bookingId === bookingId || (b as any)._id === targetId) {
+          if (approve) {
+            return {
+              ...b,
+              bookingStatus: "CANCELLED" as const,
+              cancelledBy: "CUSTOMER" as const,
+              cancellationDecision: "APPROVED" as const,
+              refundStatus: (bkData?.refundStatus || (b.paidAmount > 0 ? "PENDING" : "NONE")) as any,
+              refundAmount: bkData?.refundAmount ?? b.refundAmount,
+            };
+          } else {
+            return {
+              ...b,
+              bookingStatus: (bkData?.bookingStatus || b.previousBookingStatus || "CONFIRMED") as any,
+              cancellationDecision: "REJECTED" as const,
+              cancellationRejectionReason: rejectionReason || "Cancellation request rejected by admin",
+            };
+          }
         }
         return b;
       });
-      setBookings(updated);
-      localStorage.setItem("huma_bookings", JSON.stringify(updated));
-      showToast("Booking cancelled.");
-      return { success: true };
+
+      saveBookings(updated);
+      showToast(data.message || (approve ? "Cancellation approved." : "Cancellation rejected."));
+      return { success: true, message: data.message };
+    } catch {
+      showToast("Failed to connect to server", "error");
+      return { success: false, message: "Failed to connect to server" };
     } finally {
-      setLoading('cancelBooking', false);
+      setLoading('adminRespondCancellation', false);
     }
   };
 
@@ -1668,8 +1778,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
           return b;
         });
-        setBookings(updated);
-        localStorage.setItem("huma_bookings", JSON.stringify(updated));
+        saveBookings(updated);
         showToast("Reschedule request submitted to Admin.");
       } else {
         showToast(data.message || "Failed to submit reschedule request", "error");
@@ -1724,8 +1833,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
           return b;
         });
-        setBookings(updated);
-        localStorage.setItem("huma_bookings", JSON.stringify(updated));
+        saveBookings(updated);
         showToast(`Reschedule request ${approve ? "approved" : "rejected"}.`);
       } else {
         showToast(data.message || "Failed to respond to reschedule", "error");
@@ -1964,6 +2072,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         cancelBooking,
         requestReschedule,
         respondToReschedule,
+        adminRespondCancellation,
         updateBookingStatus,
         blockedDates,
         blockDate,

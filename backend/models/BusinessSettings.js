@@ -35,6 +35,10 @@ const businessSettingsSchema = new mongoose.Schema(
       type: Number,
       default: 1500,
     },
+    minimumBookingAmount: {
+      type: Number,
+      default: 2999,
+    },
     cancellationCharge: {
       type: Number,
       default: 500,

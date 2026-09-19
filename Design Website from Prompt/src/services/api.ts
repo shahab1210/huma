@@ -75,6 +75,13 @@ export interface LocationData {
   seoKeywords: string;
   nearbyAreas: string[];
   availableServiceGroups: ServiceGroupData[];
+  minimumBookingAmount?: number;
+  homeVisitEnabled?: boolean;
+  homeVisitMinimumAmount?: number;
+  homeVisitFee?: number;
+  homeVisitFreeThreshold?: number;
+  artistVisitEnabled?: boolean;
+  artistVisitMinimumAmount?: number;
   isActive: boolean;
   displayOrder: number;
 }

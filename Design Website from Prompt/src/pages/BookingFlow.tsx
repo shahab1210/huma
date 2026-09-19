@@ -13,6 +13,7 @@ export default function BookingFlow() {
     navigate,
     locations,
     selectedLocation,
+    businessSettings,
   } = useApp();
 
   const [step, setStep] = useState<"details" | "schedule" | "checkout" | "confirmed">("details");
@@ -22,6 +23,7 @@ export default function BookingFlow() {
   const [customerMobile, setCustomerMobile] = useState("");
   const [selectedArea, setSelectedArea] = useState(selectedLocation ? selectedLocation.name : "");
   const [address, setAddress] = useState("");
+  const [visitMode, setVisitMode] = useState<"HOME_VISIT" | "ARTIST_VISIT">("HOME_VISIT");
   
   // Schedule States
   const [selectedDate, setSelectedDate] = useState("");
@@ -66,6 +68,24 @@ export default function BookingFlow() {
     }
   }, [selectedLocation]);
 
+  // Find matched Location object
+  const matchedLoc = locations.find((l) => l.name.toLowerCase() === (selectedArea || "").toLowerCase()) ||
+    (selectedLocation && selectedLocation.name.toLowerCase() === (selectedArea || "").toLowerCase() ? selectedLocation : null);
+
+  const showArtistVisit = matchedLoc ? !!matchedLoc.artistVisitEnabled : false;
+  const showHomeVisit = matchedLoc ? (matchedLoc.homeVisitEnabled !== false) : true;
+
+  // Auto-adjust visitMode based on matched location
+  useEffect(() => {
+    if (matchedLoc) {
+      if (matchedLoc.homeVisitEnabled && !matchedLoc.artistVisitEnabled) {
+        setVisitMode("HOME_VISIT");
+      } else if (!matchedLoc.homeVisitEnabled && matchedLoc.artistVisitEnabled) {
+        setVisitMode("ARTIST_VISIT");
+      }
+    }
+  }, [matchedLoc]);
+
   // Load slots when date changes
   useEffect(() => {
     if (selectedDate) {
@@ -109,10 +129,33 @@ export default function BookingFlow() {
     );
   }
 
-  // Subtotal calculations
+  // Subtotal & Fee calculations (dynamic source of truth)
   const subtotal = cart.reduce((acc, s) => acc + s.startingPrice, 0);
-  const onlineBookingAmount = subtotal > 0 ? Math.min(1500, subtotal) : 0;
-  const remainingAmount = subtotal - onlineBookingAmount;
+  const advanceDepositSetting = businessSettings?.bookingAmount ?? 1500;
+
+  const isHomeVisitMode = visitMode === "HOME_VISIT";
+  const homeVisitMin = matchedLoc?.homeVisitMinimumAmount ?? 999;
+  const homeVisitFeeAmount = matchedLoc?.homeVisitFee !== undefined ? matchedLoc.homeVisitFee : 399;
+  const homeVisitFreeThreshold = matchedLoc?.homeVisitFreeThreshold ?? 2999;
+
+  let homeVisitFee = 0;
+  if (isHomeVisitMode) {
+    if (subtotal >= homeVisitFreeThreshold) {
+      homeVisitFee = 0;
+    } else if (subtotal >= homeVisitMin) {
+      homeVisitFee = homeVisitFeeAmount;
+    } else {
+      homeVisitFee = 0;
+    }
+  }
+
+  const totalAmount = subtotal + homeVisitFee;
+  const onlineBookingAmount = totalAmount > 0 ? Math.min(advanceDepositSetting, totalAmount) : 0;
+  const remainingAmount = totalAmount - onlineBookingAmount;
+
+  // Validation checks: Home Visit requires >= homeVisitMin; Visit the Artist has NO minimum (min ₹0)
+  const isHomeVisitBelowMin = isHomeVisitMode && subtotal < homeVisitMin;
+  const isArtistVisitBelow999 = !isHomeVisitMode && subtotal < 999; // Strictly < 999
 
   const handleNextDetails = (e: React.FormEvent) => {
     e.preventDefault();
@@ -125,6 +168,12 @@ export default function BookingFlow() {
       showToast("Please enter a valid 10-digit Indian mobile number (starts with 6, 7, 8, or 9)", "warning");
       return;
     }
+
+    if (isHomeVisitBelowMin) {
+      showToast(`Home Visit is available for bookings of ₹${homeVisitMin.toLocaleString("en-IN")} or more.`, "error");
+      return;
+    }
+
     setStep("schedule");
   };
 
@@ -147,10 +196,11 @@ export default function BookingFlow() {
       categorySnapshot: s.category,
     }));
 
-    const matchedLoc = locations.find((l) => l.name === selectedArea);
     const locationId = matchedLoc ? matchedLoc._id : undefined;
     const cleanMobile = sanitizeIndianMobile(customerMobile);
     const normalizedMobile = `+91${cleanMobile}`;
+
+    const effectiveVisitMode = isHomeVisitMode ? "HOME_VISIT" : "ARTIST_VISIT";
 
     // Create the pending booking record
     const booking = createBooking({
@@ -160,10 +210,12 @@ export default function BookingFlow() {
       serviceArea: selectedArea,
       locationId,
       address: address.trim(),
+      visitMode: effectiveVisitMode,
+      homeVisitFee,
       bookingDate: selectedDate,
       timeSlot: selectedSlot,
       subtotal,
-      totalAmount: subtotal,
+      totalAmount,
       onlineBookingAmount,
     } as any);
 
@@ -191,8 +243,10 @@ export default function BookingFlow() {
   const getWhatsAppLink = () => {
     if (!latestBooking) return "";
     const itemsStr = latestBooking.items.map((i: any) => `• ${i.nameSnapshot} (₹${i.priceSnapshot})`).join("%0A");
+    const visitModeText = latestBooking.visitMode === "HOME_VISIT" ? "Home Visit" : "Visit the Artist";
+    const feeText = latestBooking.homeVisitFee > 0 ? `%0A*Home Visit Fee:* ₹${latestBooking.homeVisitFee}` : "";
     
-    const message = `Hello Huma,%0A%0AI have just submitted a booking and payment proof online!%0A%0A*Booking ID:* ${latestBooking.bookingId}%0A*Customer Name:* ${latestBooking.customerName}%0A*Contact:* ${latestBooking.customerMobile}%0A*Date:* ${latestBooking.bookingDate}%0A*Time Slot:* ${latestBooking.timeSlot}%0A*Area:* ${latestBooking.serviceArea}%0A*Address:* ${latestBooking.address}%0A%0A*Services:*%0A${itemsStr}%0A%0A*Total Amount:* ₹${latestBooking.totalAmount}%0A*Online Advance Payment (UPI):* ₹${latestBooking.onlineBookingAmount}%0A*Remaining Balance:* ₹${latestBooking.totalAmount - latestBooking.onlineBookingAmount}%0A%0APlease verify my transaction and confirm. Thank you!`;
+    const message = `Hello Huma,%0A%0AI have just submitted a booking and payment proof online!%0A%0A*Booking ID:* ${latestBooking.bookingId}%0A*Customer Name:* ${latestBooking.customerName}%0A*Contact:* ${latestBooking.customerMobile}%0A*Mode:* ${visitModeText}%0A*Date:* ${latestBooking.bookingDate}%0A*Time Slot:* ${latestBooking.timeSlot}%0A*Area:* ${latestBooking.serviceArea}%0A*Address:* ${latestBooking.address}%0A%0A*Services:*%0A${itemsStr}%0A%0A*Subtotal:* ₹${latestBooking.subtotal || latestBooking.totalAmount}${feeText}%0A*Total Amount:* ₹${latestBooking.totalAmount}%0A*Online Advance Payment (UPI):* ₹${latestBooking.onlineBookingAmount}%0A*Remaining Balance:* ₹${latestBooking.totalAmount - latestBooking.onlineBookingAmount}%0A%0APlease verify my transaction and confirm. Thank you!`;
     
     return `https://wa.me/918960600371?text=${message}`;
   };
@@ -296,13 +350,99 @@ export default function BookingFlow() {
               </select>
             </div>
 
+            {/* Visit Mode Selection */}
+            <div className="rounded-xl border border-hairline bg-cream/20 p-4 space-y-3">
+              <label className="block text-[11px] font-semibold text-gold uppercase tracking-wider">
+                How would you like to receive the service?
+              </label>
+              <div className={`grid gap-3 ${showArtistVisit && showHomeVisit ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1"}`}>
+                {showArtistVisit && (
+                  <label
+                    className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                      visitMode === "ARTIST_VISIT"
+                        ? "border-gold bg-gold/10 shadow-sm"
+                        : "border-hairline bg-surface hover:border-gold/50"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="visitMode"
+                      value="ARTIST_VISIT"
+                      checked={visitMode === "ARTIST_VISIT"}
+                      onChange={() => setVisitMode("ARTIST_VISIT")}
+                      className="mt-1 text-gold focus:ring-gold"
+                    />
+                    <div>
+                      <p className="text-xs font-bold text-brand">Visit the Artist</p>
+                      <p className="text-[11px] text-muted mt-0.5">
+                        Come to the artist's home/service location.
+                      </p>
+                    </div>
+                  </label>
+                )}
+
+                {showHomeVisit && (
+                  <label
+                    className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                      visitMode === "HOME_VISIT"
+                        ? "border-gold bg-gold/10 shadow-sm"
+                        : "border-hairline bg-surface hover:border-gold/50"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="visitMode"
+                      value="HOME_VISIT"
+                      checked={visitMode === "HOME_VISIT"}
+                      onChange={() => setVisitMode("HOME_VISIT")}
+                      className="mt-1 text-gold focus:ring-gold"
+                    />
+                    <div>
+                      <p className="text-xs font-bold text-brand">Home Visit</p>
+                      <p className="text-[11px] text-muted mt-0.5">
+                        The artist comes to your home.
+                      </p>
+                    </div>
+                  </label>
+                )}
+              </div>
+
+              {/* Special warning for Visit the Artist if subtotal < 999 */}
+              {visitMode === "ARTIST_VISIT" && isArtistVisitBelow999 && (
+                <div className="mt-2 rounded-lg bg-amber-50/80 border border-amber-200/80 p-3 text-[11px] text-amber-900 leading-relaxed">
+                  ℹ️ <strong>Note:</strong> For bookings below ₹999, the artist may cancel or reschedule the booking if there is other work or a bridal booking.
+                </div>
+              )}
+
+              {/* Home Visit fee notification */}
+              {isHomeVisitMode && (
+                <div className="mt-2 text-xs">
+                  {subtotal < homeVisitMin ? (
+                    <div className="p-3 rounded-lg bg-red-50 text-red-700 border border-red-200">
+                      ⚠️ <strong>Home Visit is available for bookings of ₹{homeVisitMin.toLocaleString("en-IN")} or more.</strong> Current cart: ₹{subtotal.toLocaleString("en-IN")}.
+                    </div>
+                  ) : subtotal >= homeVisitFreeThreshold ? (
+                    <div className="p-3 rounded-lg bg-green-50 text-green-800 border border-green-200">
+                      🎉 <strong>Free Home Visit!</strong> Your order value (₹{subtotal.toLocaleString("en-IN")}) meets the ₹{homeVisitFreeThreshold.toLocaleString("en-IN")} threshold. ₹0 home visit fee applied!
+                    </div>
+                  ) : (
+                    <div className="p-3 rounded-lg bg-amber-50 text-amber-800 border border-amber-200">
+                      ℹ️ <strong>Home Visit Fee:</strong> A ₹{homeVisitFeeAmount} travel fee applies for home visits between ₹{homeVisitMin.toLocaleString("en-IN")} and ₹{homeVisitFreeThreshold.toLocaleString("en-IN")}. (Free for orders of ₹{homeVisitFreeThreshold.toLocaleString("en-IN")} or more).
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             <div>
-              <label htmlFor="address" className="block text-[11px] font-semibold text-gold uppercase tracking-wider">Exact Address (House, Landmark, Street)</label>
+              <label htmlFor="address" className="block text-[11px] font-semibold text-gold uppercase tracking-wider">
+                {isHomeVisitMode ? "Exact Home / Event Address" : "Customer Address / Landmark"}
+              </label>
               <textarea
                 id="address"
                 required
                 rows={3}
-                placeholder="Enter complete address where Huma should provide the service"
+                placeholder="Enter complete address (House no., Street, Landmark)"
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
                 className="mt-1 w-full rounded-lg border border-hairline bg-cream/30 px-3 py-2 text-sm text-ink focus:border-gold focus:outline-none"
@@ -311,7 +451,8 @@ export default function BookingFlow() {
 
             <button
               type="submit"
-              className="w-full rounded-md bg-brand py-3 text-sm font-semibold tracking-wide text-cream transition-colors hover:bg-brand-700 mt-2"
+              disabled={isHomeVisitBelowMin}
+              className="w-full rounded-md bg-brand py-3 text-sm font-semibold tracking-wide text-cream transition-colors hover:bg-brand-700 disabled:bg-hairline disabled:text-muted disabled:cursor-not-allowed mt-2"
             >
               Continue to Schedule
             </button>
@@ -416,9 +557,11 @@ export default function BookingFlow() {
                 <p className="text-muted">{customerMobile}</p>
               </div>
               <div>
-                <p className="font-semibold text-gold uppercase tracking-wider text-[10px]">Schedule</p>
-                <p className="mt-1 font-medium text-brand">{selectedDate}</p>
-                <p className="text-muted">{selectedSlot}</p>
+                <p className="font-semibold text-gold uppercase tracking-wider text-[10px]">Schedule &amp; Mode</p>
+                <p className="mt-1 font-medium text-brand">{selectedDate} ({selectedSlot})</p>
+                <p className="text-muted font-medium">
+                  {isHomeVisitMode ? "🏡 Home Visit" : "🎨 Visit the Artist"}
+                </p>
               </div>
               <div className="sm:col-span-2 border-t border-hairline pt-3 mt-1">
                 <p className="font-semibold text-gold uppercase tracking-wider text-[10px]">Address</p>
@@ -447,15 +590,27 @@ export default function BookingFlow() {
             {/* Booking Split Pricing */}
             <div className="space-y-2 border-b border-hairline pb-4">
               <div className="flex justify-between">
-                <span>Total Booking Value</span>
+                <span>Subtotal</span>
                 <span className="font-semibold">₹{subtotal.toLocaleString("en-IN")}</span>
               </div>
+              {isHomeVisitMode && (
+                <div className="flex justify-between text-xs">
+                  <span>Home Visit Fee</span>
+                  <span className={homeVisitFee > 0 ? "font-semibold text-brand" : "font-bold text-green-700"}>
+                    {homeVisitFee > 0 ? `+ ₹${homeVisitFee.toLocaleString("en-IN")}` : "FREE (₹0)"}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between font-semibold text-brand pt-1 border-t border-dashed border-hairline">
+                <span>Total Booking Value</span>
+                <span>₹{totalAmount.toLocaleString("en-IN")}</span>
+              </div>
               <div className="flex justify-between text-available">
-                <span className="font-semibold">Online Booking Amount (To Pay Now)</span>
+                <span className="font-semibold">Online Booking Advance (Hold Deposit)</span>
                 <span className="font-bold text-base">₹{onlineBookingAmount.toLocaleString("en-IN")}</span>
               </div>
               <div className="flex justify-between text-muted">
-                <span>Remaining Amount (Pay directly to Huma post-service)</span>
+                <span>Remaining Balance (Pay directly to Huma post-service)</span>
                 <span className="font-semibold">₹{remainingAmount.toLocaleString("en-IN")}</span>
               </div>
             </div>

@@ -40,7 +40,9 @@ exports.createLocation = async (req, res, next) => {
     const {
       name, slug, shortDescription, description, heroImage, 
       gallery, seoTitle, seoDescription, seoKeywords, 
-      nearbyAreas, availableServiceGroups, isActive, displayOrder
+      nearbyAreas, availableServiceGroups, isActive, displayOrder,
+      minimumBookingAmount, homeVisitEnabled, homeVisitMinimumAmount,
+      homeVisitFee, homeVisitFreeThreshold, artistVisitEnabled, artistVisitMinimumAmount
     } = req.body;
 
     if (!name) {
@@ -67,7 +69,14 @@ exports.createLocation = async (req, res, next) => {
       nearbyAreas,
       availableServiceGroups,
       isActive,
-      displayOrder
+      displayOrder,
+      minimumBookingAmount: minimumBookingAmount !== undefined ? minimumBookingAmount : 2999,
+      homeVisitEnabled: homeVisitEnabled !== undefined ? homeVisitEnabled : false,
+      homeVisitMinimumAmount: homeVisitMinimumAmount !== undefined ? homeVisitMinimumAmount : 999,
+      homeVisitFee: homeVisitFee !== undefined ? homeVisitFee : 399,
+      homeVisitFreeThreshold: homeVisitFreeThreshold !== undefined ? homeVisitFreeThreshold : 2999,
+      artistVisitEnabled: artistVisitEnabled !== undefined ? artistVisitEnabled : true,
+      artistVisitMinimumAmount: artistVisitMinimumAmount !== undefined ? artistVisitMinimumAmount : 2999,
     });
 
     res.status(201).json({

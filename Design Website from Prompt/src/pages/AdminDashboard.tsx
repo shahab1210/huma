@@ -103,6 +103,13 @@ export default function AdminDashboard() {
   const [locSeoDesc, setLocSeoDesc] = useState("");
   const [locNearbyAreas, setLocNearbyAreas] = useState("");
   const [locGroups, setLocGroups] = useState<string[]>([]);
+  const [locMinBooking, setLocMinBooking] = useState(2999);
+  const [locHomeVisitEnabled, setLocHomeVisitEnabled] = useState(false);
+  const [locHomeVisitMin, setLocHomeVisitMin] = useState(999);
+  const [locHomeVisitFee, setLocHomeVisitFee] = useState(399);
+  const [locHomeVisitFreeThreshold, setLocHomeVisitFreeThreshold] = useState(2999);
+  const [locArtistVisitEnabled, setLocArtistVisitEnabled] = useState(true);
+  const [locArtistVisitMin, setLocArtistVisitMin] = useState(2999);
   const [locActive, setLocActive] = useState(true);
 
   // Service Groups CRUD states
@@ -140,6 +147,7 @@ export default function AdminDashboard() {
 
   // Settings Tab States
   const [settingsAdvance, setSettingsAdvance] = useState(1500);
+  const [settingsMinBooking, setSettingsMinBooking] = useState(2999);
   const [settingsUpiId, setSettingsUpiId] = useState("demo@upi");
   const [settingsQrPreview, setSettingsQrPreview] = useState("");
   const [settingsQrBase64, setSettingsQrBase64] = useState("");
@@ -157,6 +165,7 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (businessSettings) {
       setSettingsAdvance(businessSettings.bookingAmount || 1500);
+      setSettingsMinBooking(businessSettings.minimumBookingAmount || 2999);
       setSettingsUpiId(businessSettings.upiId || "demo@upi");
       setSettingsQrPreview(businessSettings.upiQrImage || "");
       setSettingsQrBase64(businessSettings.upiQrImage || "");
@@ -406,12 +415,13 @@ export default function AdminDashboard() {
     try {
       const success = await updateBusinessSettings({
         bookingAmount: settingsAdvance,
+        minimumBookingAmount: settingsMinBooking,
         upiId: settingsUpiId,
         upiQrImage: settingsQrBase64,
         paymentWhatsApp: settingsWhatsApp,
       });
       if (success) {
-        showToast("Payment configurations updated successfully!");
+        showToast("Payment & business configurations updated successfully!");
       }
     } catch {
       showToast("Failed to save settings", "error");
@@ -605,6 +615,13 @@ export default function AdminDashboard() {
     setLocSeoDesc("");
     setLocNearbyAreas("");
     setLocGroups([]);
+    setLocMinBooking(2999);
+    setLocHomeVisitEnabled(false);
+    setLocHomeVisitMin(999);
+    setLocHomeVisitFee(399);
+    setLocHomeVisitFreeThreshold(2999);
+    setLocArtistVisitEnabled(true);
+    setLocArtistVisitMin(2999);
     setLocActive(true);
     setIsAddingLocation(true);
   };
@@ -620,6 +637,13 @@ export default function AdminDashboard() {
     setLocSeoDesc(loc.seoDescription || "");
     setLocNearbyAreas((loc.nearbyAreas || []).join(", "));
     setLocGroups((loc.availableServiceGroups || []).map((g: any) => g._id || g));
+    setLocMinBooking(loc.minimumBookingAmount !== undefined ? loc.minimumBookingAmount : 2999);
+    setLocHomeVisitEnabled(!!loc.homeVisitEnabled);
+    setLocHomeVisitMin(loc.homeVisitMinimumAmount !== undefined ? loc.homeVisitMinimumAmount : 999);
+    setLocHomeVisitFee(loc.homeVisitFee !== undefined ? loc.homeVisitFee : 399);
+    setLocHomeVisitFreeThreshold(loc.homeVisitFreeThreshold !== undefined ? loc.homeVisitFreeThreshold : 2999);
+    setLocArtistVisitEnabled(loc.artistVisitEnabled !== undefined ? !!loc.artistVisitEnabled : true);
+    setLocArtistVisitMin(loc.artistVisitMinimumAmount !== undefined ? loc.artistVisitMinimumAmount : 2999);
     setLocActive(!!loc.isActive);
     setIsAddingLocation(true);
   };
@@ -642,6 +666,13 @@ export default function AdminDashboard() {
         seoDescription: locSeoDesc,
         nearbyAreas: locNearbyAreas.split(",").map(s => s.trim()).filter(Boolean),
         availableServiceGroups: locGroups,
+        minimumBookingAmount: Number(locMinBooking),
+        homeVisitEnabled: Boolean(locHomeVisitEnabled),
+        homeVisitMinimumAmount: Number(locHomeVisitMin),
+        homeVisitFee: Number(locHomeVisitFee),
+        homeVisitFreeThreshold: Number(locHomeVisitFreeThreshold),
+        artistVisitEnabled: Boolean(locArtistVisitEnabled),
+        artistVisitMinimumAmount: Number(locArtistVisitMin),
         isActive: locActive,
       };
 
@@ -1948,6 +1979,102 @@ export default function AdminDashboard() {
                       className="mt-1 w-full rounded-lg border border-hairline bg-cream/30 px-3 py-2 text-sm focus:outline-none"
                     />
                   </div>
+                  <div className="sm:col-span-2 rounded-xl border border-hairline bg-cream/20 p-4 space-y-4">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-brand font-display">
+                      Location Booking &amp; Home Visit Rules
+                    </h4>
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <label htmlFor="loc-min-booking" className="block text-[11px] font-semibold text-gold uppercase tracking-wider">
+                          Standard Min. Booking Amount (₹)
+                        </label>
+                        <input
+                          id="loc-min-booking"
+                          type="number"
+                          min={0}
+                          value={locMinBooking}
+                          onChange={(e) => setLocMinBooking(Number(e.target.value))}
+                          className="mt-1 w-full rounded-lg border border-hairline bg-surface px-3 py-2 text-sm focus:outline-none"
+                        />
+                        <p className="text-[10px] text-muted mt-0.5">Applied for standard bookings and "Visit the Artist".</p>
+                      </div>
+
+                      <div className="flex flex-col justify-center">
+                        <label className="flex items-center gap-2 cursor-pointer mt-2">
+                          <input
+                            type="checkbox"
+                            checked={locArtistVisitEnabled}
+                            onChange={(e) => setLocArtistVisitEnabled(e.target.checked)}
+                            className="accent-brand"
+                          />
+                          <span className="text-xs font-semibold text-brand">Enable "Visit the Artist" Option</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-hairline/60 pt-3 space-y-3">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={locHomeVisitEnabled}
+                          onChange={(e) => setLocHomeVisitEnabled(e.target.checked)}
+                          className="accent-brand"
+                        />
+                        <span className="text-xs font-bold text-brand">🏡 Enable Home Visit for this Location</span>
+                      </label>
+
+                      {locHomeVisitEnabled && (
+                        <div className="grid gap-3 sm:grid-cols-3 pt-2">
+                          <div>
+                            <label htmlFor="loc-home-min" className="block text-[10px] font-semibold text-gold uppercase tracking-wider">
+                              Home Visit Min (₹)
+                            </label>
+                            <input
+                              id="loc-home-min"
+                              type="number"
+                              min={0}
+                              value={locHomeVisitMin}
+                              onChange={(e) => setLocHomeVisitMin(Number(e.target.value))}
+                              className="mt-1 w-full rounded-lg border border-hairline bg-surface px-2.5 py-1.5 text-xs focus:outline-none"
+                            />
+                            <p className="text-[9px] text-muted mt-0.5">e.g. ₹999</p>
+                          </div>
+
+                          <div>
+                            <label htmlFor="loc-home-fee" className="block text-[10px] font-semibold text-gold uppercase tracking-wider">
+                              Home Visit Fee (₹)
+                            </label>
+                            <input
+                              id="loc-home-fee"
+                              type="number"
+                              min={0}
+                              value={locHomeVisitFee}
+                              onChange={(e) => setLocHomeVisitFee(Number(e.target.value))}
+                              className="mt-1 w-full rounded-lg border border-hairline bg-surface px-2.5 py-1.5 text-xs focus:outline-none"
+                            />
+                            <p className="text-[9px] text-muted mt-0.5">e.g. ₹399</p>
+                          </div>
+
+                          <div>
+                            <label htmlFor="loc-home-free" className="block text-[10px] font-semibold text-gold uppercase tracking-wider">
+                              Free Threshold (₹)
+                            </label>
+                            <input
+                              id="loc-home-free"
+                              type="number"
+                              min={0}
+                              value={locHomeVisitFreeThreshold}
+                              onChange={(e) => setLocHomeVisitFreeThreshold(Number(e.target.value))}
+                              className="mt-1 w-full rounded-lg border border-hairline bg-surface px-2.5 py-1.5 text-xs focus:outline-none"
+                            />
+                            <p className="text-[9px] text-muted mt-0.5">e.g. ₹2,999 (0 fee above this)</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   <div className="sm:col-span-2">
                     <label className="block text-[11px] font-semibold text-gold uppercase tracking-wider mb-1">Available Service Groups</label>
                     <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto rounded-lg border border-hairline bg-cream/20 p-3">
@@ -1999,6 +2126,25 @@ export default function AdminDashboard() {
                         </span>
                       </div>
                       <p className="text-[10px] font-mono text-muted mt-0.5">/{loc.slug}</p>
+                      
+                      {/* Location rules summary badge */}
+                      <div className="mt-2.5 flex flex-wrap gap-1.5 text-[10px]">
+                        {loc.homeVisitEnabled && (
+                          <span className="rounded bg-green-50 px-2 py-0.5 font-semibold text-green-800 border border-green-200">
+                            🏡 Home Visit (Min ₹{(loc.homeVisitMinimumAmount ?? 999).toLocaleString("en-IN")}, Fee ₹{loc.homeVisitFee ?? 399})
+                          </span>
+                        )}
+                        {loc.artistVisitEnabled ? (
+                          <span className="rounded bg-amber-50 px-2 py-0.5 font-semibold text-amber-800 border border-amber-200">
+                            🎨 Visit the Artist (No Min)
+                          </span>
+                        ) : (
+                          <span className="rounded bg-slate-50 px-2 py-0.5 font-medium text-slate-600 border border-slate-200">
+                            Home Visit Only
+                          </span>
+                        )}
+                      </div>
+
                       <p className="text-xs text-muted mt-2 line-clamp-2">{loc.shortDescription}</p>
                     </div>
                     <div className="mt-4 flex gap-2 justify-end border-t border-hairline/60 pt-3">
@@ -2516,7 +2662,7 @@ export default function AdminDashboard() {
               {/* Advance Amount */}
               <div>
                 <label className="block text-[11px] font-semibold text-gold uppercase tracking-wider">
-                  Booking Advance Amount (₹)
+                  Booking Advance Hold Deposit (₹)
                 </label>
                 <input
                   type="number"
@@ -2524,10 +2670,27 @@ export default function AdminDashboard() {
                   min={100}
                   max={10000}
                   value={settingsAdvance}
-                  onChange={(e) => setSettingsAdvance(parseInt(e.target.value))}
+                  onChange={(e) => setSettingsAdvance(parseInt(e.target.value) || 0)}
                   className="mt-1 w-full rounded-lg border border-hairline bg-cream/20 px-3 py-2 text-xs text-brand focus:border-gold focus:outline-none font-semibold"
                 />
-                <p className="mt-1 text-[10px] text-muted">Fixed advance amount required to confirm any booking.</p>
+                <p className="mt-1 text-[10px] text-muted">Fixed advance amount collected online to temporarily hold any booking slot (default: ₹1,500).</p>
+              </div>
+
+              {/* Default Minimum Booking Amount */}
+              <div>
+                <label className="block text-[11px] font-semibold text-gold uppercase tracking-wider">
+                  Default Minimum Booking Amount (₹)
+                </label>
+                <input
+                  type="number"
+                  required
+                  min={0}
+                  max={50000}
+                  value={settingsMinBooking}
+                  onChange={(e) => setSettingsMinBooking(parseInt(e.target.value) || 0)}
+                  className="mt-1 w-full rounded-lg border border-hairline bg-cream/20 px-3 py-2 text-xs text-brand focus:border-gold focus:outline-none font-semibold"
+                />
+                <p className="mt-1 text-[10px] text-muted">Global default minimum cart order value required across all standard locations (default: ₹2,999).</p>
               </div>
 
               {/* UPI ID */}

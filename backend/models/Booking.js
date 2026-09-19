@@ -104,6 +104,15 @@ const bookingSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'TimeSlot',
     },
+    visitMode: {
+      type: String,
+      enum: ['HOME_VISIT', 'ARTIST_VISIT', 'DEFAULT'],
+      default: 'DEFAULT',
+    },
+    homeVisitFee: {
+      type: Number,
+      default: 0,
+    },
     subtotal: {
       type: Number,
       required: true,

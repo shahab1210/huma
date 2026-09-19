@@ -20,7 +20,7 @@ const { ApiError } = require('../middleware/errorHandler');
  */
 const createBooking = async (req, res, next) => {
   try {
-    const { items, serviceArea, address, bookingDate, timeSlotId, customerNotes, locationId, mobileNumber } = req.body;
+    const { items, serviceArea, address, bookingDate, timeSlotId, customerNotes, locationId, mobileNumber, visitMode } = req.body;
 
     if (!items || !items.length) throw new ApiError(400, 'At least one item is required.');
     if (!serviceArea) throw new ApiError(400, 'Service area is required.');
@@ -84,10 +84,44 @@ const createBooking = async (req, res, next) => {
       });
     }
 
-    // ── 2. Calculate amounts (server-side truth) ──
-    const settings = (await BusinessSettings.findOne()) || { bookingAmount: 1500 };
-    const totalAmount = subtotal;
-    const onlineBookingAmount = Math.min(settings.bookingAmount, totalAmount);
+    // ── 2. Calculate amounts & Validate Rules (server-side truth) ──
+    const settings = (await BusinessSettings.findOne()) || { bookingAmount: 1500, minimumBookingAmount: 2999 };
+    
+    let resolvedVisitMode = visitMode === 'HOME_VISIT' ? 'HOME_VISIT' : 'ARTIST_VISIT';
+    let homeVisitFee = 0;
+
+    if (resolvedVisitMode === 'HOME_VISIT') {
+      if (locationDoc && !locationDoc.homeVisitEnabled) {
+        throw new ApiError(400, `Home Visit is not available for ${locationDoc.name}.`);
+      }
+      const homeMin = locationDoc?.homeVisitMinimumAmount || 999;
+      const homeFee = locationDoc?.homeVisitFee !== undefined ? locationDoc.homeVisitFee : (homeMin === 999 ? 399 : 0);
+      const freeThreshold = locationDoc?.homeVisitFreeThreshold || 2999;
+
+      if (subtotal < homeMin) {
+        if (homeMin === 999) {
+          throw new ApiError(400, 'Home Visit is available for bookings of ₹999 or more.');
+        } else {
+          throw new ApiError(400, `Home Visit for ${locationDoc ? locationDoc.name : 'this location'} is available for bookings of ₹${homeMin.toLocaleString('en-IN')} or more.`);
+        }
+      }
+
+      if (subtotal < freeThreshold) {
+        homeVisitFee = homeFee;
+      } else {
+        homeVisitFee = 0;
+      }
+    } else {
+      if (locationDoc && !locationDoc.artistVisitEnabled) {
+        throw new ApiError(400, `Visit the Artist is not available in ${locationDoc.name}. Please select "Home Visit".`);
+      }
+      // Visit the Artist: No minimum booking restriction (minimum = ₹0)
+      resolvedVisitMode = 'ARTIST_VISIT';
+      homeVisitFee = 0;
+    }
+
+    const totalAmount = subtotal + homeVisitFee;
+    const onlineBookingAmount = Math.min(settings.bookingAmount || 1500, totalAmount);
     const remainingAmount = totalAmount - onlineBookingAmount;
 
     // ── 3. Reserve the time slot atomically ──
@@ -128,6 +162,8 @@ const createBooking = async (req, res, next) => {
       locationName: locationDoc ? locationDoc.name : '',
       locationSlug: locationDoc ? locationDoc.slug : '',
       address,
+      visitMode: resolvedVisitMode,
+      homeVisitFee,
       bookingDate: new Date(bookingDate),
       timeSlot: `${slot.startTime} - ${slot.endTime}`,
       timeSlotId: slot._id,

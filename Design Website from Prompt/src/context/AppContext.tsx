@@ -30,6 +30,8 @@ export interface Booking {
   onlineBookingAmount: number;
   paidAmount: number;
   remainingAmount: number;
+  visitMode?: "HOME_VISIT" | "ARTIST_VISIT" | "DEFAULT";
+  homeVisitFee?: number;
   paymentStatus: "PENDING" | "PAYMENT_VERIFICATION_PENDING" | "BOOKED_AMOUNT_PAID" | "PARTIAL_PAYMENT" | "FAILED" | "REFUNDED" | "REJECTED";
   bookingStatus: "PENDING_PAYMENT" | "PAYMENT_VERIFICATION_PENDING" | "CONFIRMED" | "AWAITING_REMAINING_PAYMENT" | "IN_PROGRESS" | "COMPLETED" | "CANCELLATION_REQUESTED" | "CANCELLED" | "RESCHEDULED" | "PAYMENT_REJECTED";
   cancellationReason?: string;
@@ -175,6 +177,7 @@ export interface AppContextType {
     phone: string;
     whatsapp: string;
     bookingAmount: number;
+    minimumBookingAmount?: number;
     upiId: string;
     upiQrImage: string;
     paymentWhatsApp: string;

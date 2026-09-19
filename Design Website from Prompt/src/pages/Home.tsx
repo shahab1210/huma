@@ -122,11 +122,14 @@ function Stars({ n }: { n: number }) {
 }
 
 export default function Home() {
-  const { services, navigate, reviews, locations } = useApp();
+  const { services, navigate, reviews, locations, businessSettings } = useApp();
   const [activeReviewIndex, setActiveReviewIndex] = useState(0);
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [locationSearch, setLocationSearch] = useState("");
+
+  const advanceAmount = businessSettings?.bookingAmount ?? 1500;
+  const cancellationCharge = businessSettings?.cancellationCharge ?? 500;
 
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [touchEndX, setTouchEndX] = useState<number | null>(null);
@@ -171,9 +174,9 @@ export default function Home() {
       locationMap.set(loc.slug, { ...existing, ...loc });
     });
   }
-  const activeLocationsList = Array.from(locationMap.values());
+  const allLocations = Array.from(locationMap.values());
 
-  const filteredLocations = activeLocationsList.filter((loc) => {
+  const filteredLocations = allLocations.filter((loc) => {
     if (!locationSearch.trim()) return true;
     const q = locationSearch.toLowerCase().trim();
     const matchName = loc.name.toLowerCase().includes(q);
@@ -185,7 +188,7 @@ export default function Home() {
   const FAQS = [
     {
       q: "How much is the online booking fee?",
-      a: "To confirm your slot, we collect a fixed ₹1,500 booking deposit online. If your total service value is ₹1,500 or less, you simply pay the exact total amount — never anything extra."
+      a: `To confirm your slot, we collect a fixed ₹${advanceAmount.toLocaleString('en-IN')} booking deposit online. If your total service value is ₹${advanceAmount.toLocaleString('en-IN')} or less, you simply pay the exact total amount — never anything extra.`
     },
     {
       q: "Is the remaining balance paid online?",
@@ -193,11 +196,11 @@ export default function Home() {
     },
     {
       q: "Are there separate travel charges?",
-      a: "There are no separate travel charges across our main coverage regions: Raebareli, Lucknow, Kanpur, Bachhrawan, and Lalganj."
+      a: "There are no separate travel charges across our main coverage regions: Raebareli, Lucknow, Kanpur, Bachhrawan, Lalganj, Sandila, and Fatehpur."
     },
     {
       q: "What is your cancellation/refund policy?",
-      a: "If we cancel your appointment, you get a 100% refund. If you cancel, a ₹500 cancellation fee applies. Cancellations within 5 days of the booking date are generally non-refundable."
+      a: `If we cancel your appointment, you get a 100% refund. If you cancel, a ₹${cancellationCharge.toLocaleString('en-IN')} cancellation fee applies. Cancellations within 5 days of the booking date are generally non-refundable.`
     }
   ];
 
@@ -277,7 +280,7 @@ export default function Home() {
             {/* Desktop floating deposit badge */}
             <div className="absolute -bottom-5 -left-5 hidden rounded-xl border border-hairline bg-surface px-5 py-4 shadow-md sm:block z-30">
               <p className="font-display text-sm text-brand font-semibold">Book online from</p>
-              <p className="font-display text-2xl text-gold font-bold">₹1,500</p>
+              <p className="font-display text-2xl text-gold font-bold">₹{advanceAmount.toLocaleString("en-IN")}</p>
               <p className="text-[11px] text-muted">Balance paid after service</p>
             </div>
           </div>
@@ -308,7 +311,7 @@ export default function Home() {
                 onClick={() => navigate("mehendi")}
                 className="w-full sm:w-auto rounded-xl sm:rounded-md bg-brand px-7 py-3 text-sm font-semibold tracking-wide text-cream shadow-md transition-all hover:bg-brand-700 hover:shadow-lg active:scale-95"
               >
-                Book Now (From ₹1,500)
+                Book Now (From ₹{advanceAmount.toLocaleString("en-IN")})
               </button>
               <button
                 type="button"

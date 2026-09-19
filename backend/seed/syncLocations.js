@@ -1,4 +1,5 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 const mongoose = require('mongoose');
 const connectDB = require('../config/db');
 const Location = require('../models/Location');
@@ -26,6 +27,12 @@ const syncLocations = async () => {
         seoKeywords: 'mehendi artist lucknow, best mehendi lucknow, bridal mehendi lucknow, wedding mehendi lucknow, henna artist lucknow',
         nearbyAreas: ['Gomti Nagar', 'Hazratganj', 'Aminabad', 'Alambagh', 'Indira Nagar', 'Aliganj'],
         displayOrder: 1,
+        minimumBookingAmount: 2999,
+        homeVisitEnabled: true,
+        homeVisitMinimumAmount: 2999,
+        homeVisitFee: 0,
+        homeVisitFreeThreshold: 2999,
+        artistVisitEnabled: false,
       },
       {
         name: 'Kanpur',
@@ -36,6 +43,12 @@ const syncLocations = async () => {
         seoKeywords: 'mehendi artist kanpur, best mehendi kanpur, bridal mehendi kanpur, henna artist kanpur',
         nearbyAreas: ['Civil Lines', 'Swaroop Nagar', 'Kidwai Nagar', 'Kakadeo'],
         displayOrder: 2,
+        minimumBookingAmount: 2999,
+        homeVisitEnabled: true,
+        homeVisitMinimumAmount: 2999,
+        homeVisitFee: 0,
+        homeVisitFreeThreshold: 2999,
+        artistVisitEnabled: false,
       },
       {
         name: 'Raebareli',
@@ -46,6 +59,12 @@ const syncLocations = async () => {
         seoKeywords: 'mehendi artist raebareli, best mehendi raebareli, bridal mehendi raebareli, henna artist raebareli',
         nearbyAreas: ['City Center', 'Station Road', 'Civil Lines'],
         displayOrder: 3,
+        minimumBookingAmount: 2999,
+        homeVisitEnabled: true,
+        homeVisitMinimumAmount: 2999,
+        homeVisitFee: 0,
+        homeVisitFreeThreshold: 2999,
+        artistVisitEnabled: false,
       },
       {
         name: 'Bachhrawan',
@@ -56,6 +75,12 @@ const syncLocations = async () => {
         seoKeywords: 'mehendi artist bachhrawan, mehendi bachhrawan raebareli, bridal mehendi bachhrawan',
         nearbyAreas: ['Raebareli', 'Lalganj'],
         displayOrder: 4,
+        minimumBookingAmount: 2999,
+        homeVisitEnabled: true,
+        homeVisitMinimumAmount: 2999,
+        homeVisitFee: 0,
+        homeVisitFreeThreshold: 2999,
+        artistVisitEnabled: false,
       },
       {
         name: 'Lalganj',
@@ -66,6 +91,13 @@ const syncLocations = async () => {
         seoKeywords: 'mehendi artist lalganj, mehendi lalganj raebareli, bridal mehendi lalganj',
         nearbyAreas: ['Raebareli', 'Bachhrawan'],
         displayOrder: 5,
+        minimumBookingAmount: 2999,
+        homeVisitEnabled: true,
+        homeVisitMinimumAmount: 999,
+        homeVisitFee: 399,
+        homeVisitFreeThreshold: 2999,
+        artistVisitEnabled: true,
+        artistVisitMinimumAmount: 2999,
       },
       {
         name: 'Fatehpur',
@@ -76,6 +108,12 @@ const syncLocations = async () => {
         seoKeywords: 'mehendi artist fatehpur, best mehendi fatehpur, bridal mehendi fatehpur, henna artist fatehpur',
         nearbyAreas: ['Bindki', 'Khaga'],
         displayOrder: 6,
+        minimumBookingAmount: 2999,
+        homeVisitEnabled: true,
+        homeVisitMinimumAmount: 2999,
+        homeVisitFee: 0,
+        homeVisitFreeThreshold: 2999,
+        artistVisitEnabled: false,
       },
       {
         name: 'Sandila',
@@ -86,6 +124,13 @@ const syncLocations = async () => {
         seoKeywords: 'mehendi artist sandila, mehendi sandila hardoi, bridal mehendi sandila, henna artist sandila near lucknow',
         nearbyAreas: ['Hardoi', 'Lucknow', 'Shahjahanpur'],
         displayOrder: 7,
+        minimumBookingAmount: 2999,
+        homeVisitEnabled: true,
+        homeVisitMinimumAmount: 999,
+        homeVisitFee: 399,
+        homeVisitFreeThreshold: 2999,
+        artistVisitEnabled: true,
+        artistVisitMinimumAmount: 2999,
       },
     ];
 

@@ -150,6 +150,9 @@ export default function Cart() {
               <p>
                 2. The remaining <span className="font-semibold text-brand">₹{cartRemainingAmount.toLocaleString("en-IN")}</span> is paid directly to the artist upon service completion.
               </p>
+              <p className="text-[11px] text-gold-dark font-medium border-t border-hairline/60 pt-2">
+                ℹ️ Visit the Artist is available in Lalganj &amp; Sandila with no minimum order. Home visits are available across all locations (from ₹999 in Lalganj &amp; Sandila with ₹399 fee, and from ₹2,999 in other locations).
+              </p>
             </div>
 
             {/* Checkout Action */}

@@ -4,7 +4,7 @@ const Payment = require('../models/Payment');
 const TimeSlot = require('../models/TimeSlot');
 const BusinessSettings = require('../models/BusinessSettings');
 const PaymentAuditLog = require('../models/PaymentAuditLog');
-const { sendBookingConfirmation, sendPaymentRejection } = require('../utils/whatsappService');
+const { sendBookingConfirmation, sendPaymentRejection, sendAdminNewBookingAlert, sendPartialPaymentApproval } = require('../utils/whatsappService');
 const { ApiError } = require('../middleware/errorHandler');
 const User = require('../models/User');
 
@@ -280,6 +280,30 @@ const submitProof = async (req, res, next) => {
       note: transactionId ? `Submitted Transaction ID: ${normalizedTxId}` : 'Submitted Screenshot proof',
     });
 
+    // Flow 1: WhatsApp admin alert for new booking/payment (non-blocking)
+    try {
+      await booking.populate('customer');
+      const ADMIN_WHATSAPP = '+918960600371';
+      const formattedDate = new Date(booking.bookingDate).toLocaleDateString('en-IN', {
+        day: '2-digit', month: 'long', year: 'numeric',
+      });
+      const itemsList = booking.items.map(i => i.nameSnapshot).join(', ');
+      const paymentStatusText = payment.status === 'PENDING' ? 'Verification Pending'
+        : (payment.status || booking.paymentStatus || 'PENDING');
+
+      await sendAdminNewBookingAlert(ADMIN_WHATSAPP, {
+        bookingId: booking.bookingId,
+        customerName: booking.customer.fullName || 'Customer',
+        customerMobile: booking.customer.mobileNumber || '',
+        serviceName: itemsList || 'N/A',
+        dateTime: `${formattedDate} ${booking.timeSlot || ''}`.trim(),
+        location: booking.serviceArea || booking.locationName || 'N/A',
+        paymentStatus: paymentStatusText,
+      });
+    } catch (wsError) {
+      console.error('WhatsApp admin new booking alert failed:', wsError.message);
+    }
+
     res.json({
       success: true,
       message: 'Payment proof submitted successfully. It is awaiting admin verification.',
@@ -403,14 +427,15 @@ const verifyManualPayment = async (req, res, next) => {
         month: 'long',
         year: 'numeric',
       });
-      const itemsList = booking.items.map(i => i.nameSnapshot).join(', ');
+      const itemsList = booking.items.map(i => i.nameSnapshot).join(', ') || 'N/A';
 
       await sendBookingConfirmation(booking.customer.mobileNumber, {
+        customerName: booking.customer?.fullName || 'Customer',
         bookingId: booking.bookingId,
         serviceName: itemsList,
         date: formattedDate,
         time: booking.timeSlot,
-        advancePaid: booking.paidAmount,
+        advancePaid: `₹${booking.paidAmount}`,
       });
     } catch (wsError) {
       console.error('WhatsApp booking confirmation failed to send:', wsError.message);
@@ -620,6 +645,25 @@ const verifyPartialPayment = async (req, res, next) => {
       newStatus: payment.status,
       note: adminNote || `Partial payment of ₹${amount} verified. Remaining: ₹${newRemainingAmount}`,
     });
+    // Flow 4: WhatsApp customer notification for partial payment approval (non-blocking)
+    try {
+      await booking.populate('customer');
+      if (booking.customer && booking.customer.mobileNumber) {
+        const noteText = adminNote || (newRemainingAmount <= 0
+          ? 'Payment fully verified. Booking confirmed.'
+          : `Partial payment verified. Please pay remaining balance of ₹${newRemainingAmount} before or on the appointment date.`);
+
+        await sendPartialPaymentApproval(booking.customer.mobileNumber, {
+          customerName: booking.customer.fullName || 'Customer',
+          bookingId: booking.bookingId,
+          verifiedAmount: `₹${amount}`,
+          remainingAmount: `₹${newRemainingAmount}`,
+          adminNote: noteText,
+        });
+      }
+    } catch (wsError) {
+      console.error('WhatsApp partial payment approval notification failed:', wsError.message);
+    }
     res.json({
       success: true,
       message: newRemainingAmount <= 0

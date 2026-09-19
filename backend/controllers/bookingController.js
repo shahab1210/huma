@@ -9,6 +9,7 @@ const generateBookingId = require('../utils/generateBookingId');
 const Payment = require('../models/Payment');
 const User = require('../models/User');
 const { normalizeMobile } = require('../utils/phoneUtils');
+const { sendAdminCancellationAlert, sendAdminRescheduleAlert } = require('../utils/whatsappService');
 const { ApiError } = require('../middleware/errorHandler');
 
 /**
@@ -267,6 +268,31 @@ const cancelBooking = async (req, res, next) => {
 
     await booking.save();
 
+    // Flow 5: WhatsApp admin alert for cancellation request (non-blocking)
+    try {
+      await booking.populate('customer');
+      const ADMIN_WHATSAPP = '+918960600371';
+      const formattedDate = new Date(booking.bookingDate).toLocaleDateString('en-IN', {
+        day: '2-digit', month: 'long', year: 'numeric',
+      });
+      const formattedRequestedAt = new Date(booking.cancellationRequestedAt || Date.now()).toLocaleString('en-IN', {
+        day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true,
+      });
+      const itemsList = booking.items.map(i => i.nameSnapshot).join(', ') || 'N/A';
+
+      await sendAdminCancellationAlert(ADMIN_WHATSAPP, {
+        bookingId: booking.bookingId,
+        customerName: booking.customer?.fullName || 'Customer',
+        customerMobile: booking.customer?.mobileNumber || '',
+        serviceName: itemsList,
+        appointmentDateTime: `${formattedDate} ${booking.timeSlot || ''}`.trim(),
+        cancellationRequestedAt: formattedRequestedAt,
+        cancellationReason: booking.cancellationReason || 'Customer requested cancellation',
+      });
+    } catch (wsError) {
+      console.error('WhatsApp admin cancellation alert failed:', wsError.message);
+    }
+
     res.json({
       success: true,
       message: 'Cancellation request sent to admin. Waiting for approval.',
@@ -318,6 +344,29 @@ const requestReschedule = async (req, res, next) => {
     };
 
     await booking.save();
+
+    // Flow 6: WhatsApp admin alert for reschedule request (non-blocking)
+    try {
+      await booking.populate('customer');
+      const ADMIN_WHATSAPP = '+918960600371';
+      const currentDate = new Date(booking.bookingDate).toLocaleDateString('en-IN', {
+        day: '2-digit', month: 'long', year: 'numeric',
+      });
+      const reqDate = new Date(requestedDate).toLocaleDateString('en-IN', {
+        day: '2-digit', month: 'long', year: 'numeric',
+      });
+
+      await sendAdminRescheduleAlert(ADMIN_WHATSAPP, {
+        bookingId: booking.bookingId,
+        customerName: booking.customer.fullName || 'Customer',
+        customerMobile: booking.customer.mobileNumber || '',
+        currentDateTime: `${currentDate} ${booking.timeSlot || ''}`.trim(),
+        requestedDateTime: `${reqDate} ${requestedSlot}`.trim(),
+        reason: reason || 'No reason provided',
+      });
+    } catch (wsError) {
+      console.error('WhatsApp admin reschedule alert failed:', wsError.message);
+    }
 
     res.json({
       success: true,

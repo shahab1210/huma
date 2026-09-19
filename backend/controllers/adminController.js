@@ -9,6 +9,7 @@ const Payment = require('../models/Payment');
 const Review = require('../models/Review');
 const ServiceArea = require('../models/ServiceArea');
 const BusinessSettings = require('../models/BusinessSettings');
+const { sendCancellationApproved, sendCancellationRejected } = require('../utils/whatsappService');
 const { ApiError } = require('../middleware/errorHandler');
 
 /* ═══════════════════════════════════════════════════
@@ -280,7 +281,7 @@ const respondCancellation = async (req, res, next) => {
         mongoose.Types.ObjectId.isValid(req.params.id) ? { _id: req.params.id } : null,
         { bookingId: req.params.id },
       ].filter(Boolean),
-    });
+    }).populate('customer');
     if (!booking) throw new ApiError(404, 'Booking not found.');
 
     booking.cancellationReviewedAt = new Date();
@@ -361,6 +362,46 @@ const respondCancellation = async (req, res, next) => {
     }
 
     await booking.save();
+
+    // Flows 7 & 8: WhatsApp customer notification for cancellation decision (non-blocking)
+    try {
+      const customerMobile = booking.customer?.mobileNumber;
+      if (customerMobile) {
+        if (decision === 'APPROVED') {
+          // Flow 7: Cancellation approved
+          let refundStatusText = 'No refund applicable';
+          if (booking.paidAmount > 0) {
+            if (booking.refundAmount > 0) {
+              refundStatusText = `₹${booking.refundAmount} refund will be processed`;
+            } else {
+              refundStatusText = 'No refund applicable';
+            }
+          }
+
+          await sendCancellationApproved(customerMobile, {
+            customerName: booking.customer?.fullName || 'Customer',
+            bookingId: booking.bookingId,
+            refundStatus: refundStatusText,
+            adminNote: req.body.adminNote || 'Your cancellation request has been approved by admin.',
+          });
+        } else {
+          // Flow 8: Cancellation rejected
+          const formattedDate = new Date(booking.bookingDate).toLocaleDateString('en-IN', {
+            day: '2-digit', month: 'long', year: 'numeric',
+          });
+          const appointmentDateTime = `${formattedDate} ${booking.timeSlot || ''}`.trim();
+
+          await sendCancellationRejected(customerMobile, {
+            customerName: booking.customer?.fullName || 'Customer',
+            bookingId: booking.bookingId,
+            appointmentDateTime,
+            cancellationRejectionReason: booking.cancellationRejectionReason || rejectionReason || 'Cancellation request rejected by admin',
+          });
+        }
+      }
+    } catch (wsError) {
+      console.error('WhatsApp cancellation decision notification failed:', wsError.message);
+    }
 
     res.json({
       success: true,

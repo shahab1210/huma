@@ -79,8 +79,23 @@ const uploadImage = async (fileInput, options = {}) => {
   }
 };
 
+/**
+ * Delete an image asset from Cloudinary by its public ID.
+ *
+ * @param {string} publicId - Cloudinary public ID
+ * @returns {Promise<object>}
+ */
+const deleteImage = async (publicId) => {
+  if (!isCloudinaryConfigured()) {
+    throw new Error('Cloudinary credentials are not configured in environment variables.');
+  }
+  return cloudinary.uploader.destroy(publicId);
+};
+
 module.exports = {
   cloudinary,
   uploadImage,
+  deleteImage,
   isCloudinaryConfigured,
 };
+

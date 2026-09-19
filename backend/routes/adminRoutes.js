@@ -1,7 +1,13 @@
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 const admin = require('../controllers/adminController');
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+});
 
 // ALL admin routes require auth + admin role
 router.use(requireAuth, requireAdmin);
@@ -20,10 +26,11 @@ router.post('/services', admin.createService);
 router.put('/services/:id', admin.updateService);
 router.delete('/services/:id', admin.deleteService);
 
-// Design CRUD
+// Design CRUD & Image Upload
 router.post('/designs', admin.createDesign);
 router.put('/designs/:id', admin.updateDesign);
 router.delete('/designs/:id', admin.deleteDesign);
+router.post('/designs/upload-image', upload.single('image'), admin.uploadDesignImage);
 
 // Category CRUD
 router.post('/categories', admin.createCategory);

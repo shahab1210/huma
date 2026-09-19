@@ -27,7 +27,10 @@ export const BASE_URL = getApiBaseUrl();
 export const ONLINE_BOOKING_AMOUNT = 1500;
 
 export type ServiceType = "MEHENDI" | "MAKEUP" | "PARLOUR";
-export type Availability = "AVAILABLE" | "BOOKED" | "BLOCKED";
+export interface DesignImage {
+  url: string;
+  publicId?: string;
+}
 
 export interface Service {
   id: string;
@@ -41,6 +44,7 @@ export interface Service {
   discountType?: "NONE" | "PERCENTAGE" | "FIXED";
   discountValue?: number;
   image: string;
+  images?: DesignImage[];
   featured?: boolean;
   availability: Availability;
 }
@@ -225,4 +229,24 @@ export const api = {
   getFeatured: () => delay(MOCK_SERVICES.filter((s) => s.featured)),
   getTestimonials: () => delay(MOCK_TESTIMONIALS),
   getFaqs: () => delay(MOCK_FAQS),
+};
+
+export const uploadDesignImage = async (file: File): Promise<{ url: string; publicId: string }> => {
+  const adminToken = localStorage.getItem("huma_admin_token");
+  const formData = new FormData();
+  formData.append("image", file);
+
+  const res = await fetch(`${BASE_URL}/admin/designs/upload-image`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${adminToken}`,
+    },
+    body: formData,
+  });
+
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.message || "Failed to upload image");
+  }
+  return data.data;
 };

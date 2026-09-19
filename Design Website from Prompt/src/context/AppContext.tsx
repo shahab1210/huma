@@ -1197,21 +1197,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (dataDesigns?.success && dataDesigns.data?.designs) {
-        const mappedDesigns = dataDesigns.data.designs.map((d: any) => ({
-          id: d._id,
-          type: 'MEHENDI',
-          name: d.name,
-          category: d.category?.name || d.category || '',
-          description: d.description || '',
-          duration: d.duration || '',
-          startingPrice: d.price || 0,
-          mrp: d.mrp || 0,
-          discountType: d.discountType || 'NONE',
-          discountValue: d.discountValue || 0,
-          image: d.images?.[0]?.url || d.image || '',
-          featured: !!d.isFeatured,
-          availability: d.isAvailable ? 'AVAILABLE' : 'BLOCKED',
-        }));
+        const mappedDesigns = dataDesigns.data.designs.map((d: any) => {
+          const imagesList = (d.images && d.images.length > 0)
+            ? d.images
+            : (d.image ? [{ url: d.image, publicId: '' }] : []);
+          return {
+            id: d._id,
+            type: 'MEHENDI',
+            name: d.name,
+            category: d.category?.name || d.category || '',
+            description: d.description || '',
+            duration: d.duration || '',
+            startingPrice: d.price || 0,
+            mrp: d.mrp || 0,
+            discountType: d.discountType || 'NONE',
+            discountValue: d.discountValue || 0,
+            image: imagesList[0]?.url || d.image || '',
+            images: imagesList,
+            featured: !!d.isFeatured,
+            availability: d.isAvailable ? 'AVAILABLE' : 'BLOCKED',
+          };
+        });
         merged = [...merged, ...mappedDesigns];
       }
 
@@ -1950,6 +1956,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         categoryId = fallback ? fallback._id : categories[0]._id;
       }
 
+      const imagesPayload = (service.images && service.images.length > 0)
+        ? service.images
+        : (service.image
+            ? [{ url: service.image, publicId: "" }]
+            : [{ url: "https://images.unsplash.com/photo-1762162089047-97e09435984d?w=800&h=1000", publicId: "" }]);
+
       const bodyPayload = {
         name: service.name,
         category: categoryId,
@@ -1959,7 +1971,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         discountType: service.discountType || "NONE",
         discountValue: Number(service.discountValue || 0),
         duration: service.duration || '',
-        images: [{ url: service.image || "https://images.unsplash.com/photo-1762162089047-97e09435984d?w=800&h=1000" }],
+        images: imagesPayload,
         isFeatured: !!service.featured,
         isAvailable: service.availability === "AVAILABLE",
         // for designs

@@ -10,6 +10,7 @@ const Review = require('../models/Review');
 const ServiceArea = require('../models/ServiceArea');
 const BusinessSettings = require('../models/BusinessSettings');
 const { sendCancellationApproved, sendCancellationRejected } = require('../utils/whatsappService');
+const { uploadImage, deleteImage, isCloudinaryConfigured } = require('../utils/cloudinaryService');
 const { ApiError } = require('../middleware/errorHandler');
 
 /* ═══════════════════════════════════════════════════
@@ -473,15 +474,89 @@ const deleteService = async (req, res, next) => {
 };
 
 /* ═══════════════════════════════════════════════════
-   DESIGN CRUD (Mehendi)
+   DESIGN CRUD (Mehendi) & IMAGE UPLOADS
    ═══════════════════════════════════════════════════ */
+
+/**
+ * POST /api/admin/designs/upload-image or /api/designs/upload-image
+ * Authenticated admin endpoint for uploading design images to Cloudinary.
+ */
+const uploadDesignImage = async (req, res, next) => {
+  try {
+    if (!isCloudinaryConfigured()) {
+      throw new ApiError(500, 'Cloudinary is not configured on the server.');
+    }
+
+    let fileBuffer = null;
+
+    if (req.file) {
+      fileBuffer = req.file.buffer;
+    } else if (req.body && req.body.image) {
+      const imgInput = req.body.image;
+      if (typeof imgInput === 'string' && imgInput.startsWith('data:image/')) {
+        const matches = imgInput.match(/^data:image\/([a-zA-Z0-9+]+);base64,(.+)$/);
+        if (matches) {
+          fileBuffer = Buffer.from(matches[2], 'base64');
+        }
+      }
+    }
+
+    if (!fileBuffer || fileBuffer.length === 0) {
+      throw new ApiError(400, 'No valid image file or data provided.');
+    }
+
+    // Size validation: max 10MB
+    if (fileBuffer.length > 10 * 1024 * 1024) {
+      throw new ApiError(400, 'Image file size exceeds the 10MB limit.');
+    }
+
+    // Binary magic bytes inspection
+    const isJpeg = fileBuffer[0] === 0xFF && fileBuffer[1] === 0xD8 && fileBuffer[2] === 0xFF;
+    const isPng = fileBuffer[0] === 0x89 && fileBuffer[1] === 0x50 && fileBuffer[2] === 0x4E && fileBuffer[3] === 0x47;
+    const isWebp = fileBuffer.slice(0, 4).toString('ascii') === 'RIFF' && fileBuffer.slice(8, 12).toString('ascii') === 'WEBP';
+
+    if (!isJpeg && !isPng && !isWebp) {
+      throw new ApiError(400, 'Invalid image format. Supported formats are JPG, PNG, and WebP.');
+    }
+
+    // Generate unique timestamped publicId
+    const randomSuffix = Math.random().toString(36).substring(2, 9);
+    const trackingPublicId = `design_upload_${Date.now()}_${randomSuffix}`;
+    const folder = 'huma_mehendi/designs/admin_uploads';
+
+    const uploadResult = await uploadImage(fileBuffer, {
+      folder,
+      public_id: trackingPublicId,
+      overwrite: false,
+      tags: ['huma_mehendi', 'admin_design_upload'],
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Image uploaded successfully.',
+      data: {
+        url: uploadResult.secure_url,
+        publicId: uploadResult.public_id,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
 
 const createDesign = async (req, res, next) => {
   try {
     const { mrp, discountType, discountValue } = req.body;
     validateDiscounts(mrp, discountType, discountValue);
 
-    const design = await Design.create(req.body);
+    const payload = { ...req.body };
+    if (!payload.images || !Array.isArray(payload.images) || payload.images.length === 0) {
+      if (payload.image) {
+        payload.images = [{ url: payload.image, publicId: '' }];
+      }
+    }
+
+    const design = await Design.create(payload);
     res.status(201).json({ success: true, message: 'Design created.', data: { design } });
   } catch (error) {
     next(error);
@@ -495,7 +570,15 @@ const updateDesign = async (req, res, next) => {
 
     const design = await Design.findById(req.params.id);
     if (!design) throw new ApiError(404, 'Design not found.');
-    Object.assign(design, req.body);
+
+    const payload = { ...req.body };
+    if (!payload.images || !Array.isArray(payload.images) || payload.images.length === 0) {
+      if (payload.image) {
+        payload.images = [{ url: payload.image, publicId: '' }];
+      }
+    }
+
+    Object.assign(design, payload);
     await design.save();
     res.json({ success: true, message: 'Design updated.', data: { design } });
   } catch (error) {
@@ -505,8 +588,23 @@ const updateDesign = async (req, res, next) => {
 
 const deleteDesign = async (req, res, next) => {
   try {
-    const design = await Design.findByIdAndDelete(req.params.id);
+    const design = await Design.findById(req.params.id);
     if (!design) throw new ApiError(404, 'Design not found.');
+
+    // Safe Cloudinary cleanup: ONLY delete assets created via admin uploads
+    if (design.images && Array.isArray(design.images)) {
+      for (const img of design.images) {
+        if (img.publicId && img.publicId.startsWith('huma_mehendi/designs/admin_uploads/')) {
+          try {
+            await deleteImage(img.publicId);
+          } catch (err) {
+            console.warn('Failed to delete Cloudinary asset on design deletion:', img.publicId, err.message);
+          }
+        }
+      }
+    }
+
+    await Design.findByIdAndDelete(req.params.id);
     res.json({ success: true, message: 'Design deleted.' });
   } catch (error) {
     next(error);
@@ -844,6 +942,7 @@ module.exports = {
   createDesign,
   updateDesign,
   deleteDesign,
+  uploadDesignImage,
   createCategory,
   updateCategory,
   deleteCategory,

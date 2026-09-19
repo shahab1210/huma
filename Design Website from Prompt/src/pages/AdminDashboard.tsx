@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useApp, type Booking, type Review } from "../context/AppContext";
-import { type Service, BASE_URL } from "../services/api";
+import { type Service, type DesignImage, uploadDesignImage, BASE_URL } from "../services/api";
 
 export default function AdminDashboard() {
   const {
@@ -85,6 +85,11 @@ export default function AdminDashboard() {
   const [crudFeatured, setCrudFeatured] = useState(false);
   const [crudAvailability, setCrudAvailability] = useState<Service["availability"]>("AVAILABLE");
   const [crudImage, setCrudImage] = useState("");
+  const [crudImages, setCrudImages] = useState<DesignImage[]>([]);
+  const [imageUrlInput, setImageUrlInput] = useState("");
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Locations CRUD states
   const [editingLocation, setEditingLocation] = useState<any>(null);
@@ -428,7 +433,10 @@ export default function AdminDashboard() {
     setCrudDuration("Approx. 1.5 hrs");
     setCrudFeatured(false);
     setCrudAvailability("AVAILABLE");
-    setCrudImage("https://images.unsplash.com/photo-1610173826014-d131b02d69ca?w=800&h=1000&fit=crop&auto=format&q=80");
+    setCrudImage("");
+    setCrudImages([]);
+    setImageUrlInput("");
+    setUploadError("");
     setIsAddingNew(true);
   };
 
@@ -445,8 +453,100 @@ export default function AdminDashboard() {
     setCrudDuration(item.duration);
     setCrudFeatured(!!item.featured);
     setCrudAvailability(item.availability);
-    setCrudImage(item.image);
+    setCrudImage(item.image || "");
+
+    // Populate images array
+    if (item.images && item.images.length > 0) {
+      setCrudImages([...item.images]);
+    } else if (item.image) {
+      setCrudImages([{ url: item.image, publicId: "" }]);
+    } else {
+      setCrudImages([]);
+    }
+    setImageUrlInput("");
+    setUploadError("");
     setIsAddingNew(true);
+  };
+
+  const handleDirectImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Reset input value so identical file name can be selected again if needed
+    e.target.value = "";
+
+    // File size limit: 10MB
+    if (file.size > 10 * 1024 * 1024) {
+      setUploadError("Image size must be less than 10MB.");
+      showToast("Image size exceeds 10MB limit.", "error");
+      return;
+    }
+
+    // Format validation
+    const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
+    if (!allowedTypes.includes(file.type.toLowerCase())) {
+      setUploadError("Unsupported format. Please select a JPG, PNG, or WEBP image.");
+      showToast("Only JPG, PNG, and WEBP formats are supported.", "error");
+      return;
+    }
+
+    setUploadError("");
+    setIsUploadingImage(true);
+
+    try {
+      const data = await uploadDesignImage(file);
+      if (data && data.url) {
+        const newImg: DesignImage = {
+          url: data.url,
+          publicId: data.publicId || "",
+        };
+        setCrudImages((prev) => [...prev, newImg]);
+        if (!crudImage) {
+          setCrudImage(data.url);
+        }
+        showToast("Image uploaded to Cloudinary successfully.");
+      }
+    } catch (err: any) {
+      const errMsg = err.message || "Failed to upload image to Cloudinary.";
+      setUploadError(errMsg);
+      showToast(errMsg, "error");
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
+  const handleAddUrlImage = () => {
+    const trimmedUrl = imageUrlInput.trim();
+    if (!trimmedUrl) return;
+
+    if (!/^https?:\/\/.+/i.test(trimmedUrl)) {
+      setUploadError("Please enter a valid image URL starting with http:// or https://");
+      showToast("Please enter a valid image URL starting with http:// or https://", "error");
+      return;
+    }
+
+    setUploadError("");
+    const newImg: DesignImage = {
+      url: trimmedUrl,
+      publicId: "",
+    };
+    setCrudImages((prev) => [...prev, newImg]);
+    if (!crudImage) {
+      setCrudImage(trimmedUrl);
+    }
+    setImageUrlInput("");
+  };
+
+  const handleRemoveImageItem = (index: number) => {
+    setCrudImages((prev) => {
+      const updated = prev.filter((_, i) => i !== index);
+      if (updated.length > 0) {
+        setCrudImage(updated[0].url);
+      } else {
+        setCrudImage("");
+      }
+      return updated;
+    });
   };
 
   const handleSaveCatalogItem = (e: React.FormEvent) => {
@@ -461,6 +561,11 @@ export default function AdminDashboard() {
       finalPrice = Math.max(0, crudMrp - crudDiscountValue);
     }
 
+    const primaryImg = crudImages.length > 0 ? crudImages[0].url : (crudImage || "");
+    const imagesArray = crudImages.length > 0
+      ? crudImages
+      : (primaryImg ? [{ url: primaryImg, publicId: "" }] : []);
+
     const savedItem: any = {
       id,
       type: crudType,
@@ -474,7 +579,8 @@ export default function AdminDashboard() {
       duration: crudDuration,
       featured: crudFeatured,
       availability: crudAvailability,
-      image: crudImage,
+      image: primaryImg,
+      images: imagesArray,
     };
     addOrUpdateService(savedItem);
     setIsAddingNew(false);
@@ -1534,17 +1640,116 @@ export default function AdminDashboard() {
                     />
                   </div>
 
-                  <div className="sm:col-span-2">
-                    <label htmlFor="crud-img" className="block text-[11px] font-semibold text-gold uppercase tracking-wider">Photo URL</label>
-                    <input
-                      id="crud-img"
-                      type="url"
-                      required
-                      placeholder="Image address (from unsplash, etc.)"
-                      value={crudImage}
-                      onChange={(e) => setCrudImage(e.target.value)}
-                      className="mt-1 w-full rounded-lg border border-hairline bg-cream/30 px-3 py-2 text-sm focus:outline-none"
-                    />
+                  {/* Images Manager Section */}
+                  <div className="sm:col-span-2 space-y-3 rounded-xl border border-hairline/70 bg-cream/15 p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="block text-[11px] font-semibold text-gold uppercase tracking-wider">Design Images</span>
+                        <p className="text-[11px] text-muted">Upload directly to Cloudinary or paste external image URLs.</p>
+                      </div>
+                      <span className="text-[10px] font-semibold text-brand/70 bg-brand/5 px-2 py-0.5 rounded border border-hairline/40">
+                        {crudImages.length} {crudImages.length === 1 ? 'image' : 'images'}
+                      </span>
+                    </div>
+
+                    {/* Image List / Preview Grid */}
+                    {crudImages.length > 0 && (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-1">
+                        {crudImages.map((imgObj, idx) => (
+                          <div key={idx} className="group relative rounded-lg border border-hairline bg-surface overflow-hidden shadow-xs">
+                            <img
+                              src={imgObj.url}
+                              alt={`Design Preview ${idx + 1}`}
+                              className="h-28 w-full object-cover"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1610173826014-d131b02d69ca?w=400&h=400&fit=crop";
+                              }}
+                            />
+                            <div className="p-1.5 flex items-center justify-between bg-surface/95 border-t border-hairline/50">
+                              <span className="text-[9px] font-mono text-muted truncate max-w-[65%]">
+                                {imgObj.publicId ? "Cloudinary" : "URL"}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveImageItem(idx)}
+                                className="text-[10px] font-semibold text-rose-600 hover:text-rose-700 transition-colors"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                            {idx === 0 && (
+                              <span className="absolute top-1 left-1 rounded bg-brand/85 px-1.5 py-0.5 text-[8px] font-bold text-cream uppercase tracking-wider shadow">
+                                Primary
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Upload & URL Controls */}
+                    <div className="grid gap-3 sm:grid-cols-2 pt-2">
+                      {/* Direct Upload */}
+                      <div className="space-y-1.5">
+                        <span className="block text-[10px] font-semibold text-gold uppercase tracking-wider">Direct Upload from Device</span>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/jpg"
+                          onChange={handleDirectImageUpload}
+                          className="hidden"
+                        />
+                        <button
+                          type="button"
+                          disabled={isUploadingImage}
+                          onClick={() => fileInputRef.current?.click()}
+                          className="w-full flex items-center justify-center gap-2 rounded-lg border border-gold/40 bg-gold/10 px-3 py-2 text-xs font-semibold text-brand hover:bg-gold/20 transition-colors disabled:opacity-50"
+                        >
+                          {isUploadingImage ? (
+                            <>
+                              <svg className="animate-spin h-3.5 w-3.5 text-brand" viewBox="0 0 24 24" fill="none">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                              </svg>
+                              Uploading to Cloudinary...
+                            </>
+                          ) : (
+                            <>+ Upload Image</>
+                          )}
+                        </button>
+                      </div>
+
+                      {/* Image URL Input */}
+                      <div className="space-y-1.5">
+                        <span className="block text-[10px] font-semibold text-gold uppercase tracking-wider">Image URL</span>
+                        <div className="flex gap-2">
+                          <input
+                            type="url"
+                            placeholder="https://example.com/image.jpg"
+                            value={imageUrlInput}
+                            onChange={(e) => setImageUrlInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                handleAddUrlImage();
+                              }
+                            }}
+                            className="flex-1 rounded-lg border border-hairline bg-cream/30 px-3 py-1.5 text-xs focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleAddUrlImage}
+                            className="rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-cream hover:bg-brand/90 transition-colors shrink-0"
+                          >
+                            Add URL
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {uploadError && (
+                      <p className="text-[11px] text-rose-600 bg-rose-50 border border-rose-200 rounded p-2">{uploadError}</p>
+                    )}
                   </div>
 
                   <div className="flex gap-4 items-center sm:col-span-2 mt-2">

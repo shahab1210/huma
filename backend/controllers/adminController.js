@@ -414,20 +414,36 @@ const respondCancellation = async (req, res, next) => {
   }
 };
 
-const validateDiscounts = (mrp, discountType, discountValue) => {
-  if (mrp && mrp < 0) {
-    throw new ApiError(400, 'MRP cannot be negative.');
+const normalizePayloadMrp = (payload) => {
+  if (payload.mrp === '' || payload.mrp === 0 || payload.mrp === '0' || payload.mrp === undefined || payload.mrp === null) {
+    payload.mrp = null;
+    payload.discountType = 'NONE';
+    payload.discountValue = 0;
+  } else {
+    payload.mrp = Number(payload.mrp);
   }
-  if (discountType === 'PERCENTAGE') {
-    if (discountValue < 0 || discountValue > 100) {
-      throw new ApiError(400, 'Percentage discount must be between 0 and 100.');
+  return payload;
+};
+
+const validateDiscounts = (mrp, discountType, discountValue) => {
+  if (mrp !== undefined && mrp !== null && mrp !== '') {
+    const mrpNum = Number(mrp);
+    if (mrpNum < 0) {
+      throw new ApiError(400, 'MRP cannot be negative.');
     }
-  } else if (discountType === 'FIXED') {
-    if (discountValue < 0) {
-      throw new ApiError(400, 'Fixed discount cannot be negative.');
-    }
-    if (mrp && discountValue > mrp) {
-      throw new ApiError(400, 'Fixed discount cannot exceed MRP.');
+    if (discountType === 'PERCENTAGE') {
+      const dv = Number(discountValue);
+      if (dv < 0 || dv > 100) {
+        throw new ApiError(400, 'Percentage discount must be between 0 and 100.');
+      }
+    } else if (discountType === 'FIXED') {
+      const dv = Number(discountValue);
+      if (dv < 0) {
+        throw new ApiError(400, 'Fixed discount cannot be negative.');
+      }
+      if (dv > mrpNum) {
+        throw new ApiError(400, 'Fixed discount cannot exceed MRP.');
+      }
     }
   }
 };
@@ -438,10 +454,10 @@ const validateDiscounts = (mrp, discountType, discountValue) => {
 
 const createService = async (req, res, next) => {
   try {
-    const { mrp, discountType, discountValue } = req.body;
-    validateDiscounts(mrp, discountType, discountValue);
+    const payload = normalizePayloadMrp({ ...req.body });
+    validateDiscounts(payload.mrp, payload.discountType, payload.discountValue);
 
-    const service = await Service.create(req.body);
+    const service = await Service.create(payload);
     res.status(201).json({ success: true, message: 'Service created.', data: { service } });
   } catch (error) {
     next(error);
@@ -450,12 +466,12 @@ const createService = async (req, res, next) => {
 
 const updateService = async (req, res, next) => {
   try {
-    const { mrp, discountType, discountValue } = req.body;
-    validateDiscounts(mrp, discountType, discountValue);
+    const payload = normalizePayloadMrp({ ...req.body });
+    validateDiscounts(payload.mrp, payload.discountType, payload.discountValue);
 
     const service = await Service.findById(req.params.id);
     if (!service) throw new ApiError(404, 'Service not found.');
-    Object.assign(service, req.body);
+    Object.assign(service, payload);
     await service.save();
     res.json({ success: true, message: 'Service updated.', data: { service } });
   } catch (error) {
@@ -546,10 +562,9 @@ const uploadDesignImage = async (req, res, next) => {
 
 const createDesign = async (req, res, next) => {
   try {
-    const { mrp, discountType, discountValue } = req.body;
-    validateDiscounts(mrp, discountType, discountValue);
+    const payload = normalizePayloadMrp({ ...req.body });
+    validateDiscounts(payload.mrp, payload.discountType, payload.discountValue);
 
-    const payload = { ...req.body };
     if (!payload.images || !Array.isArray(payload.images) || payload.images.length === 0) {
       if (payload.image) {
         payload.images = [{ url: payload.image, publicId: '' }];
@@ -565,13 +580,12 @@ const createDesign = async (req, res, next) => {
 
 const updateDesign = async (req, res, next) => {
   try {
-    const { mrp, discountType, discountValue } = req.body;
-    validateDiscounts(mrp, discountType, discountValue);
+    const payload = normalizePayloadMrp({ ...req.body });
+    validateDiscounts(payload.mrp, payload.discountType, payload.discountValue);
 
     const design = await Design.findById(req.params.id);
     if (!design) throw new ApiError(404, 'Design not found.');
 
-    const payload = { ...req.body };
     if (!payload.images || !Array.isArray(payload.images) || payload.images.length === 0) {
       if (payload.image) {
         payload.images = [{ url: payload.image, publicId: '' }];

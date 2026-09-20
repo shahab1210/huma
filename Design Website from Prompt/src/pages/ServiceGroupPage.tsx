@@ -26,6 +26,65 @@ interface GroupProduct {
   coverage?: string;
 }
 
+const FALLBACK_GROUPS: Record<string, Partial<ServiceGroupData>> = {
+  'bridal-mehendi': {
+    name: 'Bridal Mehendi',
+    slug: 'bridal-mehendi',
+    parentType: 'MEHENDI',
+    shortDescription: 'Exquisite bridal henna designs crafted for your special day.',
+    seoTitle: 'Bridal Mehendi Designs & Packages | Huma Mehendi',
+    seoDescription: 'Explore exquisite bridal mehendi designs by Huma Mehendi. Intricate full-hand, Rajasthani, and royal bridal henna artistry.',
+  },
+  'arabic-mehendi': {
+    name: 'Arabic Mehendi',
+    slug: 'arabic-mehendi',
+    parentType: 'MEHENDI',
+    shortDescription: 'Flowing floral patterns and modern Arabic henna artistry.',
+    seoTitle: 'Arabic Mehendi Designs & Services | Huma Mehendi',
+    seoDescription: 'Beautiful Arabic mehendi designs featuring modern floral trails, shaded patterns and contemporary henna art.',
+  },
+  'traditional-mehendi': {
+    name: 'Traditional Mehendi',
+    slug: 'traditional-mehendi',
+    parentType: 'MEHENDI',
+    shortDescription: 'Classic Rajasthani and Indian heritage mehendi designs.',
+    seoTitle: 'Traditional Indian Mehendi Art | Huma Mehendi',
+    seoDescription: 'Classic Indian and Rajasthani traditional mehendi designs for weddings, Karwa Chauth, Teej and festivals.',
+  },
+  'bridal-makeup': {
+    name: 'Bridal Makeup',
+    slug: 'bridal-makeup',
+    parentType: 'MAKEUP',
+    shortDescription: 'Flawless HD & Airbrush bridal makeover for your big day.',
+    seoTitle: 'Bridal Makeup Packages & Artist | Huma Mehendi',
+    seoDescription: 'Professional bridal makeup services including HD, Airbrush and pre-bridal packages by experienced makeup artists.',
+  },
+  'party-makeup': {
+    name: 'Party Makeup',
+    slug: 'party-makeup',
+    parentType: 'MAKEUP',
+    shortDescription: 'Glamorous occasion, reception and party styling.',
+    seoTitle: 'Party & Occasion Makeup Services | Huma Mehendi',
+    seoDescription: 'Stunning party, reception and engagement makeup styling tailored to your outfit and event.',
+  },
+  'skin-care': {
+    name: 'Skin Care',
+    slug: 'skin-care',
+    parentType: 'PARLOUR',
+    shortDescription: 'Rejuvenating facials, cleanups and skin glow treatments.',
+    seoTitle: 'Skin Care & Facial Treatments | Huma Mehendi',
+    seoDescription: 'Professional skin care, rejuvenating facials, cleanups, and bridal glow treatments.',
+  },
+  'hair-care': {
+    name: 'Hair Care',
+    slug: 'hair-care',
+    parentType: 'PARLOUR',
+    shortDescription: 'Hair styling, spa treatments and grooming services.',
+    seoTitle: 'Hair Care & Hair Styling Services | Huma Mehendi',
+    seoDescription: 'Expert hair care, spa treatments, conditioning and bridal hair styling services.',
+  },
+};
+
 export default function ServiceGroupPage({ slug }: ServiceGroupPageProps) {
   const { navigate, addToCart } = useApp();
   const [group, setGroup] = useState<ServiceGroupData | null>(null);
@@ -44,11 +103,17 @@ export default function ServiceGroupPage({ slug }: ServiceGroupPageProps) {
           setGroup(data.data.serviceGroup);
           setDesigns(data.data.designs || []);
           setServices(data.data.services || []);
+        } else if (FALLBACK_GROUPS[slug]) {
+          setGroup(FALLBACK_GROUPS[slug] as ServiceGroupData);
         } else {
           setError('Service group not found');
         }
       } catch {
-        setError('Failed to load service group');
+        if (FALLBACK_GROUPS[slug]) {
+          setGroup(FALLBACK_GROUPS[slug] as ServiceGroupData);
+        } else {
+          setError('Failed to load service group');
+        }
       } finally {
         setLoading(false);
       }
@@ -161,6 +226,7 @@ export default function ServiceGroupPage({ slug }: ServiceGroupPageProps) {
       <SEOHead
         title={group.seoTitle || `${group.name} | Huma Mehendi & Beauty Artist`}
         description={group.seoDescription || group.shortDescription}
+        canonicalUrl={`https://humamehendi.in/${slug}`}
         structuredData={structuredData}
       />
       <Breadcrumbs items={[

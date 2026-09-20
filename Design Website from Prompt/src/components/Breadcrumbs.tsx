@@ -44,23 +44,25 @@ export default function Breadcrumbs({ items }: BreadcrumbsProps) {
       />
       <ol className="flex flex-wrap items-center gap-1">
         <li>
-          <button
-            onClick={() => navigate('home')}
+          <a
+            href="/"
+            onClick={(e) => { e.preventDefault(); navigate('home'); }}
             className="hover:text-brand transition-colors"
           >
             Home
-          </button>
+          </a>
         </li>
         {items.map((item, idx) => (
           <li key={idx} className="flex items-center gap-1">
             <span className="text-gold" aria-hidden>›</span>
             {item.path ? (
-              <button
-                onClick={() => navigate(item.path!)}
+              <a
+                href={`/${item.path.replace(/^\//, '')}`}
+                onClick={(e) => { e.preventDefault(); navigate(item.path!); }}
                 className="hover:text-brand transition-colors"
               >
                 {item.label}
-              </button>
+              </a>
             ) : (
               <span className="text-ink font-medium">{item.label}</span>
             )}

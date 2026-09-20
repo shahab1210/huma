@@ -14,6 +14,8 @@ export default function BookingFlow() {
     locations,
     selectedLocation,
     businessSettings,
+    bookingMode,
+    setBookingMode,
   } = useApp();
 
   const [step, setStep] = useState<"details" | "schedule" | "checkout" | "confirmed">("details");
@@ -33,6 +35,8 @@ export default function BookingFlow() {
   // Payment Modal State
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [latestBooking, setLatestBooking] = useState<any>(null);
+
+  const isOwnDesign = bookingMode === "OWN_DESIGN";
 
   // Helper to sanitize and normalize Indian mobile inputs
   const sanitizeIndianMobile = (val: string): string => {
@@ -74,6 +78,7 @@ export default function BookingFlow() {
 
   const showArtistVisit = matchedLoc ? !!matchedLoc.artistVisitEnabled : false;
   const showHomeVisit = matchedLoc ? (matchedLoc.homeVisitEnabled !== false) : true;
+  const isArtistHomeCity = matchedLoc?.slug === "lalganj" || matchedLoc?.slug === "sandila";
 
   // Auto-adjust visitMode based on matched location
   useEffect(() => {
@@ -113,24 +118,33 @@ export default function BookingFlow() {
     );
   }
 
-  if (cart.length === 0 && step !== "confirmed") {
+  if (cart.length === 0 && !isOwnDesign && step !== "confirmed") {
     return (
-      <div className="mx-auto max-w-md px-5 py-28 text-center">
-        <h2 className="font-display text-2xl text-brand">No Services in Cart</h2>
-        <p className="mt-3 text-sm text-muted">Please add services before checking out.</p>
-        <button
-          type="button"
-          onClick={() => navigate("mehendi")}
-          className="mt-6 rounded-md bg-brand px-5 py-2 text-sm font-medium text-cream"
-        >
-          Browse Designs
-        </button>
+      <div className="mx-auto max-w-md px-5 py-28 text-center space-y-4">
+        <h2 className="font-display text-2xl text-brand">Your Cart is Empty</h2>
+        <p className="text-sm text-muted">You can choose a design from our catalog or book an appointment with your own custom design.</p>
+        <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
+          <button
+            type="button"
+            onClick={() => navigate("mehendi")}
+            className="rounded-md bg-brand px-5 py-2.5 text-sm font-semibold text-cream hover:bg-brand-700 transition"
+          >
+            Browse Catalog Designs
+          </button>
+          <button
+            type="button"
+            onClick={() => setBookingMode("OWN_DESIGN")}
+            className="rounded-md border border-gold bg-gold/10 px-5 py-2.5 text-sm font-semibold text-brand hover:bg-gold/20 transition"
+          >
+            🎨 Book with Your Own Design (₹899)
+          </button>
+        </div>
       </div>
     );
   }
 
   // Subtotal & Fee calculations (dynamic source of truth)
-  const subtotal = cart.reduce((acc, s) => acc + s.startingPrice, 0);
+  const subtotal = isOwnDesign ? 899 : cart.reduce((acc, s) => acc + s.startingPrice, 0);
   const advanceDepositSetting = businessSettings?.bookingAmount ?? 1500;
 
   const isHomeVisitMode = visitMode === "HOME_VISIT";
@@ -140,21 +154,28 @@ export default function BookingFlow() {
 
   let homeVisitFee = 0;
   if (isHomeVisitMode) {
-    if (subtotal >= homeVisitFreeThreshold) {
+    if (isOwnDesign) {
+      // For own-design bookings, travel fee is evaluated on the final quoted price post-service; initial online advance is strictly ₹899
       homeVisitFee = 0;
-    } else if (subtotal >= homeVisitMin) {
-      homeVisitFee = homeVisitFeeAmount;
     } else {
-      homeVisitFee = 0;
+      if (subtotal >= homeVisitFreeThreshold) {
+        homeVisitFee = 0;
+      } else if (subtotal >= homeVisitMin) {
+        homeVisitFee = homeVisitFeeAmount;
+      } else {
+        homeVisitFee = 0;
+      }
     }
   }
 
-  const totalAmount = subtotal + homeVisitFee;
-  const onlineBookingAmount = totalAmount > 0 ? Math.min(advanceDepositSetting, totalAmount) : 0;
-  const remainingAmount = totalAmount - onlineBookingAmount;
+  const totalAmount = isOwnDesign ? 899 : (subtotal + homeVisitFee);
+  const onlineBookingAmount = isOwnDesign
+    ? 899
+    : (totalAmount > 0 ? Math.min(advanceDepositSetting, totalAmount) : 0);
+  const remainingAmount = isOwnDesign ? 0 : (totalAmount - onlineBookingAmount);
 
-  // Validation checks: Home Visit requires >= homeVisitMin; Visit the Artist has NO minimum (min ₹0)
-  const isHomeVisitBelowMin = isHomeVisitMode && subtotal < homeVisitMin;
+  // Validation checks: Home Visit requires >= homeVisitMin for catalog; Visit the Artist has NO minimum (min ₹0)
+  const isHomeVisitBelowMin = !isOwnDesign && isHomeVisitMode && subtotal < homeVisitMin;
   const isArtistVisitBelow999 = !isHomeVisitMode && subtotal < 999; // Strictly < 999
 
   const handleNextDetails = (e: React.FormEvent) => {
@@ -187,14 +208,23 @@ export default function BookingFlow() {
 
   const handlePlaceOrder = () => {
     // Generate Booking Items
-    const items = cart.map((s) => ({
-      itemId: s.id,
-      itemType: s.type,
-      nameSnapshot: s.name,
-      priceSnapshot: s.startingPrice,
-      durationSnapshot: s.duration,
-      categorySnapshot: s.category,
-    }));
+    const items = isOwnDesign
+      ? [{
+          itemId: "own-custom-design",
+          itemType: "DESIGN" as const,
+          nameSnapshot: "Custom / Own Mehendi Design (Booking Advance)",
+          priceSnapshot: 899,
+          durationSnapshot: "Consultation & Service",
+          categorySnapshot: "Custom Design",
+        }]
+      : cart.map((s) => ({
+          itemId: s.id,
+          itemType: s.type,
+          nameSnapshot: s.name,
+          priceSnapshot: s.startingPrice,
+          durationSnapshot: s.duration,
+          categorySnapshot: s.category,
+        }));
 
     const locationId = matchedLoc ? matchedLoc._id : undefined;
     const cleanMobile = sanitizeIndianMobile(customerMobile);
@@ -211,12 +241,16 @@ export default function BookingFlow() {
       locationId,
       address: address.trim(),
       visitMode: effectiveVisitMode,
-      homeVisitFee,
+      homeVisitFee: 0,
       bookingDate: selectedDate,
       timeSlot: selectedSlot,
-      subtotal,
-      totalAmount,
-      onlineBookingAmount,
+      subtotal: 899,
+      totalAmount: 899,
+      onlineBookingAmount: 899,
+      bookingAdvance: isOwnDesign ? 899 : 0,
+      finalDesignPrice: 0,
+      bookingType: isOwnDesign ? "OWN_DESIGN" : "CATALOG",
+      isOwnDesign,
     } as any);
 
     setLatestBooking(booking);
@@ -232,7 +266,7 @@ export default function BookingFlow() {
       paymentStatus: "PAYMENT_VERIFICATION_PENDING",
       bookingStatus: "PAYMENT_VERIFICATION_PENDING",
       paidAmount: 0,
-      remainingAmount: subtotal,
+      remainingAmount,
     }));
     
     setStep("confirmed");
@@ -242,10 +276,15 @@ export default function BookingFlow() {
   // WhatsApp Message Prefill generator
   const getWhatsAppLink = () => {
     if (!latestBooking) return "";
-    const itemsStr = latestBooking.items.map((i: any) => `• ${i.nameSnapshot} (₹${i.priceSnapshot})`).join("%0A");
     const visitModeText = latestBooking.visitMode === "HOME_VISIT" ? "Home Visit" : "Visit the Artist";
+
+    if (latestBooking.bookingType === "OWN_DESIGN" || latestBooking.isOwnDesign) {
+      const message = `Hello Huma,%0A%0AI have just placed an Own Design Booking and submitted my ₹${latestBooking.onlineBookingAmount} booking advance online!%0A%0A*Booking ID:* ${latestBooking.bookingId}%0A*Customer Name:* ${latestBooking.customerName}%0A*Contact:* ${latestBooking.customerMobile}%0A*Mode:* ${visitModeText}%0A*Date:* ${latestBooking.bookingDate}%0A*Time Slot:* ${latestBooking.timeSlot}%0A*Area:* ${latestBooking.serviceArea}%0A*Address:* ${latestBooking.address}%0A%0A*Booking Advance Paid:* ₹${latestBooking.onlineBookingAmount} (to be adjusted against final bill)%0A%0A📸 *(Optional)* I am attaching my custom mehendi design image here for your price estimate. Thank you!`;
+      return `https://wa.me/918960600371?text=${message}`;
+    }
+
     const feeText = latestBooking.homeVisitFee > 0 ? `%0A*Home Visit Fee:* ₹${latestBooking.homeVisitFee}` : "";
-    
+    const itemsStr = latestBooking.items.map((i: any) => `• ${i.nameSnapshot} (₹${i.priceSnapshot})`).join("%0A");
     const message = `Hello Huma,%0A%0AI have just submitted a booking and payment proof online!%0A%0A*Booking ID:* ${latestBooking.bookingId}%0A*Customer Name:* ${latestBooking.customerName}%0A*Contact:* ${latestBooking.customerMobile}%0A*Mode:* ${visitModeText}%0A*Date:* ${latestBooking.bookingDate}%0A*Time Slot:* ${latestBooking.timeSlot}%0A*Area:* ${latestBooking.serviceArea}%0A*Address:* ${latestBooking.address}%0A%0A*Services:*%0A${itemsStr}%0A%0A*Subtotal:* ₹${latestBooking.subtotal || latestBooking.totalAmount}${feeText}%0A*Total Amount:* ₹${latestBooking.totalAmount}%0A*Online Advance Payment (UPI):* ₹${latestBooking.onlineBookingAmount}%0A*Remaining Balance:* ₹${latestBooking.totalAmount - latestBooking.onlineBookingAmount}%0A%0APlease verify my transaction and confirm. Thank you!`;
     
     return `https://wa.me/918960600371?text=${message}`;
@@ -275,6 +314,60 @@ export default function BookingFlow() {
       {/* STEP 1: Details */}
       {step === "details" && (
         <div className="rounded-2xl border border-hairline bg-surface p-6 md:p-8 space-y-6">
+          {/* Mode Switcher Banner */}
+          <div className="flex items-center justify-between p-3 rounded-xl bg-cream/50 border border-hairline">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">{isOwnDesign ? "🎨" : "📖"}</span>
+              <div>
+                <p className="text-xs font-bold text-brand">
+                  {isOwnDesign ? "Own Design Booking" : "Catalog Design Booking"}
+                </p>
+                <p className="text-[11px] text-muted">
+                  {isOwnDesign
+                    ? "Booking appointment with your own custom design (₹899 Advance)"
+                    : `${cart.length} item(s) selected from catalog`}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (isOwnDesign) {
+                  setBookingMode("CATALOG");
+                  if (cart.length === 0) navigate("mehendi");
+                } else {
+                  setBookingMode("OWN_DESIGN");
+                }
+              }}
+              className="text-xs font-semibold text-gold hover:underline whitespace-nowrap px-2 py-1"
+            >
+              {isOwnDesign ? "Browse Catalog →" : "Book with Own Design →"}
+            </button>
+          </div>
+
+          {/* Own Design Specific Information Banner */}
+          {isOwnDesign && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 space-y-2 text-xs text-amber-950">
+              <div className="flex items-center gap-2 font-bold text-brand text-sm">
+                <span>🎨 Book with Your Own Design</span>
+                <span className="rounded-full bg-brand text-cream px-2 py-0.5 text-[10px]">Booking Advance: ₹899</span>
+              </div>
+              <ul className="space-y-1.5 text-[11px] text-amber-900 list-disc list-inside">
+                <li>
+                  <strong>Booking Advance:</strong> Pay ₹899 now to confirm your booking. The ₹899 advance will be adjusted against your final service amount.
+                </li>
+                {!isArtistHomeCity && (
+                  <li>
+                    <strong>Minimum Booking Requirement:</strong> Appointment for booking minimum ₹2,999.
+                  </li>
+                )}
+                <li>
+                  <strong>Price Quote (Optional):</strong> Send your design to the artist on WhatsApp to get a better idea of the expected price. <em>(Optional — booking does not require sending design upfront)</em>.
+                </li>
+              </ul>
+            </div>
+          )}
+
           <h2 className="font-display text-2xl text-brand border-b border-hairline pb-2">Customer &amp; Location Details</h2>
           
           <form onSubmit={handleNextDetails} className="space-y-4">
@@ -375,7 +468,7 @@ export default function BookingFlow() {
                     <div>
                       <p className="text-xs font-bold text-brand">Visit the Artist</p>
                       <p className="text-[11px] text-muted mt-0.5">
-                        Come to the artist's home/service location.
+                        Come to the artist's home/service location in {matchedLoc?.name || "Lalganj/Sandila"}.
                       </p>
                     </div>
                   </label>
@@ -417,7 +510,27 @@ export default function BookingFlow() {
               {/* Home Visit fee notification */}
               {isHomeVisitMode && (
                 <div className="mt-2 text-xs">
-                  {subtotal < homeVisitMin ? (
+                  {isOwnDesign ? (
+                    isArtistHomeCity ? (
+                      <div className="p-3 rounded-lg bg-amber-50 text-amber-900 border border-amber-200 leading-relaxed space-y-1">
+                        <p>
+                          ℹ️ <strong>Home Visit in {matchedLoc?.name}:</strong> Pay ₹899 booking advance online now (adjusted in your final bill).
+                        </p>
+                        <p className="text-[11px] text-amber-800">
+                          Standard Home Visit rules apply to your final quoted amount: ₹399 travel fee applies if final service is under ₹2,999; FREE travel fee for orders of ₹2,999 or more.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="p-3 rounded-lg bg-blue-50 text-blue-900 border border-blue-200 leading-relaxed space-y-1">
+                        <p>
+                          ℹ️ <strong>Home Visit in {matchedLoc?.name || selectedArea}:</strong> Pay ₹899 booking advance online now.
+                        </p>
+                        <p className="text-[11px] text-blue-800">
+                          Appointment for booking minimum ₹2,999. The ₹899 advance will be adjusted against your final service amount. (Optional: send your design to the artist on WhatsApp to get its price).
+                        </p>
+                      </div>
+                    )
+                  ) : subtotal < homeVisitMin ? (
                     <div className="p-3 rounded-lg bg-red-50 text-red-700 border border-red-200">
                       ⚠️ <strong>Home Visit is available for bookings of ₹{homeVisitMin.toLocaleString("en-IN")} or more.</strong> Current cart: ₹{subtotal.toLocaleString("en-IN")}.
                     </div>
@@ -573,52 +686,88 @@ export default function BookingFlow() {
 
             {/* Selected Items */}
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Items</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">
+                {isOwnDesign ? "Selected Booking Option" : "Items"}
+              </p>
               <div className="divide-y divide-hairline border-y border-hairline">
-                {cart.map((s) => (
-                  <div key={s.id} className="flex justify-between py-3">
-                    <div>
-                      <p className="font-semibold text-brand">{s.name}</p>
-                      <p className="text-xs text-muted">{s.duration} • {s.category}</p>
+                {isOwnDesign ? (
+                  <div className="py-3 space-y-2">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="font-semibold text-brand">🎨 Custom / Own Mehendi Design (Booking Advance)</p>
+                        <p className="text-xs text-muted">Slot Reservation &amp; Advance Deposit</p>
+                      </div>
+                      <span className="font-semibold text-base">₹899</span>
                     </div>
-                    <span className="font-semibold">₹{s.startingPrice.toLocaleString("en-IN")}</span>
+                    <div className="rounded-lg bg-amber-50/90 border border-amber-200/80 p-3 text-[11px] text-amber-900 leading-relaxed space-y-1">
+                      <p>
+                        <strong>💡 How this works:</strong> Pay ₹899 now to confirm your booking. The ₹899 advance will be adjusted against your final service amount.
+                      </p>
+                      <p>
+                        Your final design/service price will be confirmed after the artist reviews your requirements/design.
+                        {!isArtistHomeCity && (
+                          <span> (Appointment for booking minimum ₹2,999).</span>
+                        )}
+                      </p>
+                      <p className="text-[10.5px] text-amber-800">
+                        <em>Optional: Send your design to the artist on WhatsApp to get a better idea of the expected price.</em>
+                      </p>
+                    </div>
                   </div>
-                ))}
+                ) : (
+                  cart.map((s) => (
+                    <div key={s.id} className="flex justify-between py-3">
+                      <div>
+                        <p className="font-semibold text-brand">{s.name}</p>
+                        <p className="text-xs text-muted">{s.duration} • {s.category}</p>
+                      </div>
+                      <span className="font-semibold">₹{s.startingPrice.toLocaleString("en-IN")}</span>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 
             {/* Booking Split Pricing */}
             <div className="space-y-2 border-b border-hairline pb-4">
               <div className="flex justify-between">
-                <span>Subtotal</span>
+                <span>{isOwnDesign ? "Initial Booking Advance" : "Subtotal"}</span>
                 <span className="font-semibold">₹{subtotal.toLocaleString("en-IN")}</span>
               </div>
-              {isHomeVisitMode && (
+              {!isOwnDesign && isHomeVisitMode && (
                 <div className="flex justify-between text-xs">
-                  <span>Home Visit Fee</span>
+                  <span>Home Visit Travel Fee</span>
                   <span className={homeVisitFee > 0 ? "font-semibold text-brand" : "font-bold text-green-700"}>
                     {homeVisitFee > 0 ? `+ ₹${homeVisitFee.toLocaleString("en-IN")}` : "FREE (₹0)"}
                   </span>
                 </div>
               )}
               <div className="flex justify-between font-semibold text-brand pt-1 border-t border-dashed border-hairline">
-                <span>Total Booking Value</span>
-                <span>₹{totalAmount.toLocaleString("en-IN")}</span>
+                <span>{isOwnDesign ? "Total Payable Online Now" : "Total Booking Value"}</span>
+                <span>₹{isOwnDesign ? "899" : totalAmount.toLocaleString("en-IN")}</span>
               </div>
               <div className="flex justify-between text-available">
-                <span className="font-semibold">Online Booking Advance (Hold Deposit)</span>
+                <span className="font-semibold">
+                  {isOwnDesign ? "Booking Advance Paid Online" : "Online Booking Advance (Hold Deposit)"}
+                </span>
                 <span className="font-bold text-base">₹{onlineBookingAmount.toLocaleString("en-IN")}</span>
               </div>
-              <div className="flex justify-between text-muted">
-                <span>Remaining Balance (Pay directly to Huma post-service)</span>
-                <span className="font-semibold">₹{remainingAmount.toLocaleString("en-IN")}</span>
-              </div>
+              {isOwnDesign ? (
+                <p className="text-[11px] text-muted pt-1">
+                  Remaining amount = (Final Quoted Service Price + Travel Fee - ₹899 Advance Paid). Paid directly to Huma post-service.
+                </p>
+              ) : (
+                <div className="flex justify-between text-muted">
+                  <span>Remaining Balance (Pay directly to Huma post-service)</span>
+                  <span className="font-semibold">₹{remainingAmount.toLocaleString("en-IN")}</span>
+                </div>
+              )}
             </div>
 
             {/* Action */}
             <div className="space-y-3 pt-2">
               <p className="text-[11px] text-muted text-center leading-relaxed">
-                By clicking the button below, you will open the manual UPI payment gateway to scan the QR code and submit your transaction proof.
+                By clicking the button below, you will open the manual UPI payment gateway to scan the QR code and submit your transaction proof for the ₹899 advance.
               </p>
               
               <button
@@ -626,7 +775,7 @@ export default function BookingFlow() {
                 onClick={handlePlaceOrder}
                 className="w-full rounded-md bg-brand py-3 text-sm font-semibold tracking-wide text-cream transition-colors hover:bg-brand-700"
               >
-                Pay ₹{onlineBookingAmount.toLocaleString("en-IN")} via UPI &amp; Submit Proof
+                Pay ₹{onlineBookingAmount.toLocaleString("en-IN")} Booking Advance via UPI
               </button>
             </div>
           </div>
@@ -652,9 +801,31 @@ export default function BookingFlow() {
             Your appointment request has been scheduled, and your payment proof was submitted. Huma will verify your transaction shortly. You will see the update in your dashboard and receive a WhatsApp message once confirmed.
           </p>
 
+          {/* Own Design Alert in Confirmation */}
+          {(latestBooking.bookingType === "OWN_DESIGN" || latestBooking.isOwnDesign) && (
+            <div className="rounded-xl border border-emerald-300 bg-emerald-50/80 p-4 max-w-md mx-auto text-left space-y-1.5">
+              <p className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                <span>🎨</span> Own Design Booking Confirmed
+              </p>
+              <p className="text-[11px] text-emerald-900 leading-relaxed">
+                Your <strong>₹899 booking advance</strong> has been received and will be deducted from your final bill.
+              </p>
+              <p className="text-[11px] text-emerald-800 leading-relaxed">
+                <em>Optional: You can click the WhatsApp button below to share your design image with Huma for an advance price estimate.</em>
+              </p>
+            </div>
+          )}
+
           {/* Booking Summary Card */}
           <div className="rounded-xl border border-hairline bg-cream/30 p-5 text-left text-xs text-ink space-y-4 max-w-md mx-auto">
-            <h3 className="font-display text-sm text-brand border-b border-hairline pb-2 font-semibold">Appointment Details</h3>
+            <div className="flex justify-between items-center border-b border-hairline pb-2">
+              <h3 className="font-display text-sm text-brand font-semibold">Appointment Details</h3>
+              {(latestBooking.bookingType === "OWN_DESIGN" || latestBooking.isOwnDesign) && (
+                <span className="rounded-full bg-gold/20 text-brand px-2 py-0.5 text-[10px] font-bold">
+                  🎨 Own Design
+                </span>
+              )}
+            </div>
             
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -670,27 +841,39 @@ export default function BookingFlow() {
             </div>
 
             <div className="border-t border-hairline pt-3">
-              <p className="text-[10px] text-gold font-semibold uppercase">Location</p>
-              <p className="text-muted">{latestBooking.address}, {latestBooking.serviceArea}</p>
+              <p className="text-[10px] text-gold font-semibold uppercase">Location &amp; Mode</p>
+              <p className="text-muted">
+                {latestBooking.address}, {latestBooking.serviceArea} (
+                <span className="font-medium text-brand">
+                  {latestBooking.visitMode === "HOME_VISIT" ? "Home Visit" : "Visit the Artist"}
+                </span>
+                )
+              </p>
             </div>
 
             <div className="border-t border-hairline pt-3 space-y-1">
-              <div className="flex justify-between text-muted">
-                <span>Total Amount:</span>
-                <span className="font-medium text-brand">₹{latestBooking.totalAmount.toLocaleString("en-IN")}</span>
-              </div>
               <div className="flex justify-between text-gold">
-                <span>Online Advance Amount:</span>
+                <span>Online Advance Paid:</span>
                 <span className="font-semibold">₹{latestBooking.onlineBookingAmount.toLocaleString("en-IN")} (Verification Pending)</span>
               </div>
-              <div className="flex justify-between text-brand border-t border-dashed border-hairline pt-1 mt-1 font-semibold">
-                <span>Remaining Balance Due:</span>
-                <span>₹{latestBooking.remainingAmount.toLocaleString("en-IN")}</span>
-              </div>
-            </div>
-            
-            <div className="text-[10px] text-muted text-center pt-1">
-              Remaining balance is paid directly to the artist post-service.
+              {latestBooking.bookingType === "OWN_DESIGN" || latestBooking.isOwnDesign ? (
+                <div className="text-[10.5px] text-muted pt-1">
+                  Remaining amount will be calculated post-quote as (Final Design Price + Travel Fee - ₹899 Advance).
+                </div>
+              ) : (
+                <>
+                  <div className="flex justify-between text-muted">
+                    <span>Total Booking Value:</span>
+                    <span className="font-medium text-brand">₹{latestBooking.totalAmount.toLocaleString("en-IN")}</span>
+                  </div>
+                  {latestBooking.remainingAmount > 0 && (
+                    <div className="flex justify-between text-brand border-t border-dashed border-hairline pt-1 mt-1 font-semibold">
+                      <span>Remaining Balance Due:</span>
+                      <span>₹{latestBooking.remainingAmount.toLocaleString("en-IN")}</span>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
 
@@ -700,9 +883,9 @@ export default function BookingFlow() {
               href={getWhatsAppLink()}
               target="_blank"
               rel="noreferrer"
-              className="flex items-center justify-center gap-2 rounded-md bg-[#25D366] py-3 text-sm font-semibold tracking-wide text-white transition-transform hover:scale-[1.02]"
+              className="flex items-center justify-center gap-2 rounded-md bg-[#25D366] py-3 text-sm font-semibold tracking-wide text-white transition-transform hover:scale-[1.02] shadow-md"
             >
-              Message Huma on WhatsApp
+              💬 (Optional) Message Huma on WhatsApp
             </a>
             
             <button

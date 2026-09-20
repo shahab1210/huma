@@ -2,13 +2,35 @@ import { useState } from "react";
 import { useApp } from "../context/AppContext";
 import { type Service, type ServiceType } from "../services/api";
 import ServiceCard from "../components/ServiceCard";
+import SEOHead from "../components/SEOHead";
+
+const CATALOG_SEO: Record<ServiceType, { title: string; description: string; keywords: string; path: string }> = {
+  MEHENDI: {
+    title: "Mehendi Designs & Services | Huma Mehendi",
+    description: "Explore our collection of bridal, Arabic, Rajasthani and party mehendi designs. Book professional mehendi artist services in Lucknow, Raebareli, Kanpur, Sandila & Fatehpur.",
+    keywords: "mehendi designs, bridal mehendi, arabic mehendi, rajasthani mehendi, henna designs, mehendi artist near me, mehendi booking online",
+    path: "/mehendi",
+  },
+  MAKEUP: {
+    title: "Makeup Artist & Makeup Services | Huma Mehendi",
+    description: "Professional HD & airbrush bridal makeup, party makeup and occasion styling services. Book your makeup appointment in Lucknow, Raebareli, Kanpur & nearby cities.",
+    keywords: "bridal makeup, HD makeup, airbrush makeup, party makeup, makeup artist lucknow, makeup artist raebareli, wedding makeup",
+    path: "/makeup",
+  },
+  PARLOUR: {
+    title: "Beauty Parlour Services | Huma Mehendi",
+    description: "Professional beauty parlour services including facials, waxing, skin care, hair care and pre-bridal grooming packages in Lucknow, Raebareli, Kanpur & nearby cities.",
+    keywords: "beauty parlour, facial, waxing, skin care, hair care, pre-bridal grooming, parlour services lucknow, parlour services raebareli",
+    path: "/parlour",
+  },
+};
 
 interface CatalogProps {
   type: ServiceType;
 }
 
 export default function Catalog({ type }: CatalogProps) {
-  const { services, addToCart, cart } = useApp();
+  const { services, addToCart, cart, startOwnDesignBooking } = useApp();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [featuredOnly, setFeaturedOnly] = useState(false);
@@ -77,6 +99,12 @@ export default function Catalog({ type }: CatalogProps) {
 
   return (
     <div className="mx-auto max-w-6xl px-5 py-24 lg:px-8">
+      <SEOHead
+        title={CATALOG_SEO[type].title}
+        description={CATALOG_SEO[type].description}
+        keywords={CATALOG_SEO[type].keywords}
+        canonicalUrl={`https://humamehendi.in${CATALOG_SEO[type].path}`}
+      />
       {/* Page Header */}
       <div className="mb-10 text-center">
         <p className="flex items-center justify-center gap-3 text-[11px] font-medium uppercase tracking-[0.28em] text-gold">
@@ -95,6 +123,32 @@ export default function Catalog({ type }: CatalogProps) {
             : "Pamper yourself with our professional skin and hair grooming treatments."}
         </p>
       </div>
+
+      {/* OWN DESIGN PROMINENT CTA BANNER FOR MEHENDI */}
+      {type === "MEHENDI" && (
+        <div className="mb-8 rounded-2xl border border-gold/40 bg-gradient-to-r from-cream/90 via-gold-soft/20 to-cream/90 p-5 sm:p-6 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
+          <div className="flex items-center gap-3.5">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gold/20 text-2xl">
+              🎨
+            </span>
+            <div>
+              <h3 className="font-display text-base font-bold text-brand sm:text-lg">
+                Have your own custom mehendi design?
+              </h3>
+              <p className="text-xs text-muted mt-0.5">
+                Pay a ₹899 booking advance to confirm your slot (adjusted in your final bill). Optional: share your design on WhatsApp for an advance quote.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => startOwnDesignBooking()}
+            className="w-full sm:w-auto shrink-0 rounded-xl bg-brand px-5 py-2.5 text-xs sm:text-sm font-semibold text-cream hover:bg-brand-700 transition shadow-sm active:scale-95"
+          >
+            Book with Your Own Design →
+          </button>
+        </div>
+      )}
 
       {/* Catalog Search & Filters (Mainly for Mehendi, optional for others) */}
       {type === "MEHENDI" && (

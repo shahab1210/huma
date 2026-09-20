@@ -63,13 +63,13 @@ const LOCATION_IMAGES: Record<string, string> = {
 };
 
 const DEFAULT_LOCATIONS = [
-  { _id: "loc-1", name: "Lucknow", slug: "lucknow", shortDescription: "Premium mehendi & beauty in Lucknow" },
-  { _id: "loc-2", name: "Kanpur", slug: "kanpur", shortDescription: "Professional beauty in Kanpur" },
-  { _id: "loc-3", name: "Raebareli", slug: "raebareli", shortDescription: "Expert mehendi in Raebareli" },
-  { _id: "loc-4", name: "Bachhrawan", slug: "bachhrawan", shortDescription: "Mehendi & beauty in Bachhrawan" },
-  { _id: "loc-5", name: "Lalganj", slug: "lalganj", shortDescription: "Beautiful mehendi in Lalganj" },
-  { _id: "loc-6", name: "Fatehpur", slug: "fatehpur", shortDescription: "Mehendi & beauty in Fatehpur" },
-  { _id: "loc-7", name: "Sandila", slug: "sandila", shortDescription: "Mehendi & beauty in Sandila" }
+  { _id: "loc-1", name: "Lucknow", slug: "lucknow", shortDescription: "Bridal mehendi & doorstep styling across Lucknow" },
+  { _id: "loc-2", name: "Kanpur", slug: "kanpur", shortDescription: "Bridal henna & beauty services with home visits in Kanpur" },
+  { _id: "loc-3", name: "Raebareli", slug: "raebareli", shortDescription: "Bridal mehendi & festive henna at your doorstep in Raebareli" },
+  { _id: "loc-4", name: "Bachhrawan", slug: "bachhrawan", shortDescription: "Bridal henna & parlour care in Bachhrawan" },
+  { _id: "loc-5", name: "Lalganj", slug: "lalganj", shortDescription: "Bridal henna with Home Visit & Visit the Artist booking in Lalganj" },
+  { _id: "loc-6", name: "Fatehpur", slug: "fatehpur", shortDescription: "Bridal henna & makeovers delivered to your home in Fatehpur" },
+  { _id: "loc-7", name: "Sandila", slug: "sandila", shortDescription: "Bridal mehendi with Home Visit & Visit the Artist options in Sandila" }
 ];
 
 const CATEGORIES = [
@@ -122,7 +122,7 @@ function Stars({ n }: { n: number }) {
 }
 
 export default function Home() {
-  const { services, navigate, reviews, locations, businessSettings } = useApp();
+  const { services, navigate, reviews, locations, businessSettings, startOwnDesignBooking } = useApp();
   const [activeReviewIndex, setActiveReviewIndex] = useState(0);
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
@@ -210,6 +210,36 @@ export default function Home() {
         title="Huma Mehendi – Professional Mehendi Artist in Lucknow, Raebareli & UP"
         description="Looking for the best mehendi artist in Lucknow, Raebareli, Kanpur, Sandila & Fatehpur? Huma Mehendi offers expert bridal mehendi, Arabic henna, makeup & parlour services."
         keywords="best mehendi artist in lucknow, mehendi artist lucknow, best mehendi lucknow, top mehendi artist lucknow, bridal mehendi lucknow, wedding mehendi lucknow, mehendi designer lucknow, best mehendi artist in raebareli, mehendi artist raebareli, bridal mehendi raebareli"
+        canonicalUrl="https://humamehendi.in/"
+        structuredData={[
+          {
+            '@context': 'https://schema.org',
+            '@type': 'BeautySalon',
+            name: 'Huma Mehendi & Beauty Artist',
+            url: 'https://humamehendi.in',
+            telephone: '+918960600371',
+            email: 'humamehendi1210@gmail.com',
+            description: 'Professional mehendi artist offering bridal mehendi, Arabic henna, makeup & beauty services in Lucknow, Kanpur, Raebareli, Sandila, Fatehpur & UP.',
+            areaServed: [
+              { '@type': 'City', name: 'Lucknow' },
+              { '@type': 'City', name: 'Kanpur' },
+              { '@type': 'City', name: 'Raebareli' },
+              { '@type': 'City', name: 'Fatehpur' },
+              { '@type': 'City', name: 'Sandila' },
+              { '@type': 'City', name: 'Lalganj' },
+              { '@type': 'City', name: 'Bachhrawan' },
+            ],
+            sameAs: [
+              'https://www.instagram.com/huma_mehendi_06'
+            ],
+          },
+          {
+            '@context': 'https://schema.org',
+            '@type': 'WebSite',
+            name: 'Huma Mehendi',
+            url: 'https://humamehendi.in',
+          },
+        ] as unknown as object}
       />
       {/* HERO SECTION */}
       <section className="relative overflow-hidden pt-14 sm:pt-20">
@@ -306,19 +336,19 @@ export default function Home() {
 
             {/* CTA Buttons */}
             <div className="mt-6 flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-3">
+              <a
+                href="/mehendi"
+                onClick={(e) => { e.preventDefault(); navigate("mehendi"); }}
+                className="w-full sm:w-auto rounded-xl sm:rounded-md bg-brand px-6 py-3 text-sm font-semibold tracking-wide text-cream shadow-md transition-all hover:bg-brand-700 hover:shadow-lg active:scale-95 text-center"
+              >
+                Browse Catalog
+              </a>
               <button
                 type="button"
-                onClick={() => navigate("mehendi")}
-                className="w-full sm:w-auto rounded-xl sm:rounded-md bg-brand px-7 py-3 text-sm font-semibold tracking-wide text-cream shadow-md transition-all hover:bg-brand-700 hover:shadow-lg active:scale-95"
+                onClick={() => startOwnDesignBooking()}
+                className="w-full sm:w-auto rounded-xl sm:rounded-md border border-gold bg-gold/15 px-5 py-3 text-sm font-semibold tracking-wide text-brand shadow-sm transition-all hover:bg-gold/25 active:scale-95 flex items-center justify-center gap-1.5"
               >
-                Book Now (From ₹{advanceAmount.toLocaleString("en-IN")})
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate("mehendi")}
-                className="border-b border-gold pb-0.5 text-xs sm:text-sm font-semibold tracking-wide text-brand transition-colors hover:text-gold"
-              >
-                Explore Services &amp; Prices →
+                <span>🎨</span> Book with Your Own Design (₹899 Advance)
               </button>
             </div>
 
@@ -347,33 +377,33 @@ export default function Home() {
             Quick Category Access
           </p>
           <div className="grid grid-cols-3 gap-2.5">
-            <button
-              type="button"
-              onClick={() => navigate("mehendi")}
+            <a
+              href="/mehendi"
+              onClick={(e) => { e.preventDefault(); navigate("mehendi"); }}
               className="flex flex-col items-center justify-center p-3 rounded-xl border border-hairline bg-surface shadow-sm hover:border-gold active:scale-95 transition"
             >
               <span className="text-2xl mb-1">🌿</span>
               <span className="text-xs font-bold text-brand">Mehendi</span>
               <span className="text-[9px] text-muted">Bridal &amp; Party</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate("makeup")}
+            </a>
+            <a
+              href="/makeup"
+              onClick={(e) => { e.preventDefault(); navigate("makeup"); }}
               className="flex flex-col items-center justify-center p-3 rounded-xl border border-hairline bg-surface shadow-sm hover:border-gold active:scale-95 transition"
             >
               <span className="text-2xl mb-1">💄</span>
               <span className="text-xs font-bold text-brand">Makeup</span>
               <span className="text-[9px] text-muted">HD &amp; Airbrush</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate("parlour")}
+            </a>
+            <a
+              href="/parlour"
+              onClick={(e) => { e.preventDefault(); navigate("parlour"); }}
               className="flex flex-col items-center justify-center p-3 rounded-xl border border-hairline bg-surface shadow-sm hover:border-gold active:scale-95 transition"
             >
               <span className="text-2xl mb-1">🌸</span>
               <span className="text-xs font-bold text-brand">Parlour</span>
               <span className="text-[9px] text-muted">Facials &amp; Care</span>
-            </button>
+            </a>
           </div>
         </div>
       </section>
@@ -421,10 +451,10 @@ export default function Home() {
               const locImg = LOCATION_IMAGES[slugKey] || loc.heroImage || "https://images.unsplash.com/photo-1596178065887-1198b6148b2b?w=200&h=200&fit=crop";
 
               return (
-                <button
+                <a
                   key={loc._id || loc.slug}
-                  type="button"
-                  onClick={() => navigate(loc.slug)}
+                  href={`/${loc.slug}`}
+                  onClick={(e) => { e.preventDefault(); navigate(loc.slug); }}
                   className="group relative flex flex-col items-center justify-center rounded-2xl border border-hairline bg-surface p-4 text-center shadow-sm hover:shadow-md hover:border-gold transition duration-300"
                 >
                   <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-full border-2 border-gold/40 shadow-md group-hover:border-gold group-hover:scale-105 transition duration-300 bg-gold/10">
@@ -445,7 +475,7 @@ export default function Home() {
                   {loc.shortDescription && (
                     <p className="mt-0.5 text-[10px] text-muted line-clamp-1">{loc.shortDescription}</p>
                   )}
-                </button>
+                </a>
               );
             })}
           </div>
@@ -472,10 +502,10 @@ export default function Home() {
         </div>
         <div className="grid gap-6 md:grid-cols-3">
           {CATEGORIES.map((c) => (
-            <button
+            <a
               key={c.key}
-              type="button"
-              onClick={() => navigate(c.view)}
+              href={`/${c.view}`}
+              onClick={(e) => { e.preventDefault(); navigate(c.view); }}
               className="group overflow-hidden rounded-xl border border-hairline bg-surface text-left"
             >
               <div className="aspect-16/10 overflow-hidden bg-gold-soft/40">
@@ -493,7 +523,7 @@ export default function Home() {
                   Explore →
                 </span>
               </div>
-            </button>
+            </a>
           ))}
         </div>
       </section>
@@ -518,6 +548,28 @@ export default function Home() {
                 <ServiceCard service={s} />
               </div>
             ))}
+          </div>
+
+          {/* Dedicated Own Design Banner */}
+          <div className="mt-12 rounded-2xl border border-gold/40 bg-gradient-to-r from-cream via-gold-soft/20 to-cream p-6 sm:p-8 flex flex-col md:flex-row items-center justify-between gap-6 shadow-sm">
+            <div className="space-y-2 text-center md:text-left">
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-gold/20 px-3 py-0.5 text-[11px] font-bold text-brand uppercase tracking-wider">
+                <span>🎨</span> Custom Mehndi Service
+              </div>
+              <h3 className="font-display text-2xl text-brand font-bold">
+                Have Your Own Design in Mind?
+              </h3>
+              <p className="text-sm text-muted max-w-xl">
+                Have an inspiration photo from Pinterest or Instagram? Pay a <strong>₹899 booking advance</strong> to confirm your slot (adjusted against your final bill). You can also optionally send your design on WhatsApp for a quick estimate!
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => startOwnDesignBooking()}
+              className="shrink-0 rounded-xl bg-brand px-6 py-3 text-sm font-semibold text-cream shadow hover:bg-brand-700 transition active:scale-95 flex items-center gap-2"
+            >
+              <span>🎨</span> Book with Your Own Design →
+            </button>
           </div>
         </div>
       </section>
@@ -547,13 +599,13 @@ export default function Home() {
               With more than 500 brides and families served, our promise is simple: refined artistry,
               genuine care, and services that come to you — with no separate travel charge.
             </p>
-            <button
-              type="button"
-              onClick={() => navigate("about")}
+            <a
+              href="/about"
+              onClick={(e) => { e.preventDefault(); navigate("about"); }}
               className="mt-6 inline-block border-b border-gold pb-0.5 text-sm font-semibold text-brand transition-colors hover:text-gold"
             >
               Learn more about us →
-            </button>
+            </a>
           </div>
         </div>
       </section>
@@ -640,13 +692,13 @@ export default function Home() {
           })}
         </div>
         <div className="text-center mt-8">
-          <button
-            type="button"
-            onClick={() => navigate("faq")}
+          <a
+            href="/faq"
+            onClick={(e) => { e.preventDefault(); navigate("faq"); }}
             className="text-xs font-semibold uppercase tracking-wider text-gold hover:underline"
           >
             View full booking guide &amp; FAQ →
-          </button>
+          </a>
         </div>
       </section>
     </div>

@@ -32,6 +32,11 @@ export interface Booking {
   remainingAmount: number;
   visitMode?: "HOME_VISIT" | "ARTIST_VISIT" | "DEFAULT";
   homeVisitFee?: number;
+  bookingType?: "CATALOG" | "OWN_DESIGN";
+  isOwnDesign?: boolean;
+  ownDesignNotes?: string;
+  bookingAdvance?: number;
+  finalDesignPrice?: number;
   paymentStatus: "PENDING" | "PAYMENT_VERIFICATION_PENDING" | "BOOKED_AMOUNT_PAID" | "PARTIAL_PAYMENT" | "FAILED" | "REFUNDED" | "REJECTED";
   bookingStatus: "PENDING_PAYMENT" | "PAYMENT_VERIFICATION_PENDING" | "CONFIRMED" | "AWAITING_REMAINING_PAYMENT" | "IN_PROGRESS" | "COMPLETED" | "CANCELLATION_REQUESTED" | "CANCELLED" | "RESCHEDULED" | "PAYMENT_REJECTED";
   cancellationReason?: string;
@@ -142,6 +147,9 @@ export interface AppContextType {
 
   // Bookings
   bookings: Booking[];
+  bookingMode: "CATALOG" | "OWN_DESIGN";
+  setBookingMode: (mode: "CATALOG" | "OWN_DESIGN") => void;
+  startOwnDesignBooking: () => void;
   createBooking: (bookingData: Omit<Booking, "bookingId" | "paymentStatus" | "bookingStatus" | "createdAt" | "paidAmount" | "remainingAmount">) => Booking;
   confirmBookingPayment: (bookingId: string, paymentId: string) => void;
   cancelBooking: (bookingId: string, reason: string, isCustomer: boolean, customerUpiId?: string, customerUpiName?: string) => Promise<{ success: boolean; message?: string }>;
@@ -375,6 +383,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [locations, setLocations] = useState<LocationData[]>([]);
   const [serviceGroups, setServiceGroups] = useState<ServiceGroupData[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<LocationData | null>(null);
+  const [bookingMode, setBookingMode] = useState<"CATALOG" | "OWN_DESIGN">("CATALOG");
   const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>({});
 
   const setLoading = (key: string, value: boolean) => {
@@ -1181,21 +1190,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       let merged: Service[] = [];
 
       if (dataServices?.success && dataServices.data?.services) {
-        const mappedServices = dataServices.data.services.map((s: any) => ({
-          id: s._id,
-          type: s.serviceType,
-          name: s.name,
-          category: s.category?.name || s.category || '',
-          description: s.description || '',
-          duration: s.duration || '',
-          startingPrice: s.price || 0,
-          mrp: s.mrp || 0,
-          discountType: s.discountType || 'NONE',
-          discountValue: s.discountValue || 0,
-          image: s.images?.[0]?.url || s.image || '',
-          featured: !!s.isFeatured,
-          availability: s.isAvailable ? 'AVAILABLE' : 'BLOCKED',
-        }));
+        const mappedServices = dataServices.data.services.map((s: any) => {
+          const hasDiscount = s.mrp && Number(s.mrp) > Number(s.price || 0);
+          return {
+            id: s._id,
+            type: s.serviceType,
+            name: s.name,
+            category: s.category?.name || s.category || '',
+            description: s.description || '',
+            duration: s.duration || '',
+            startingPrice: Number(s.price || 0),
+            mrp: hasDiscount ? Number(s.mrp) : undefined,
+            discountType: hasDiscount ? (s.discountType || 'NONE') : 'NONE',
+            discountValue: hasDiscount ? Number(s.discountValue || 0) : 0,
+            image: s.images?.[0]?.url || s.image || '',
+            featured: !!s.isFeatured,
+            availability: s.isAvailable ? 'AVAILABLE' : 'BLOCKED',
+          };
+        });
         merged = [...merged, ...mappedServices];
       }
 
@@ -1204,6 +1216,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const imagesList = (d.images && d.images.length > 0)
             ? d.images
             : (d.image ? [{ url: d.image, publicId: '' }] : []);
+          const hasDiscount = d.mrp && Number(d.mrp) > Number(d.price || 0);
           return {
             id: d._id,
             type: 'MEHENDI',
@@ -1211,10 +1224,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             category: d.category?.name || d.category || '',
             description: d.description || '',
             duration: d.duration || '',
-            startingPrice: d.price || 0,
-            mrp: d.mrp || 0,
-            discountType: d.discountType || 'NONE',
-            discountValue: d.discountValue || 0,
+            startingPrice: Number(d.price || 0),
+            mrp: hasDiscount ? Number(d.mrp) : undefined,
+            discountType: hasDiscount ? (d.discountType || 'NONE') : 'NONE',
+            discountValue: hasDiscount ? Number(d.discountValue || 0) : 0,
             image: imagesList[0]?.url || d.image || '',
             images: imagesList,
             featured: !!d.isFeatured,
@@ -1545,6 +1558,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const cartRemainingAmount = cartSubtotal - cartBookingAmount;
 
   // Booking operations
+  const startOwnDesignBooking = () => {
+    setBookingMode("OWN_DESIGN");
+    setCurrentView("booking");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const createBooking = (bookingData: Omit<Booking, "bookingId" | "paymentStatus" | "bookingStatus" | "createdAt" | "paidAmount" | "remainingAmount">) => {
     const bookingId = `HM-${Math.floor(100000 + Math.random() * 900000)}`;
     const newBooking: Booking = {
@@ -1965,14 +1984,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             ? [{ url: service.image, publicId: "" }]
             : [{ url: "https://images.unsplash.com/photo-1762162089047-97e09435984d?w=800&h=1000", publicId: "" }]);
 
+      const hasMrp = service.mrp && Number(service.mrp) > Number(service.startingPrice || 0);
       const bodyPayload = {
         name: service.name,
         category: categoryId,
         description: service.description || '',
         price: Number(service.startingPrice || 0),
-        mrp: Number(service.mrp || service.startingPrice || 0),
-        discountType: service.discountType || "NONE",
-        discountValue: Number(service.discountValue || 0),
+        mrp: hasMrp ? Number(service.mrp) : null,
+        discountType: hasMrp ? (service.discountType || "NONE") : "NONE",
+        discountValue: hasMrp ? Number(service.discountValue || 0) : 0,
         duration: service.duration || '',
         images: imagesPayload,
         isFeatured: !!service.featured,
@@ -2082,6 +2102,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         cartBookingAmount,
         cartRemainingAmount,
         bookings,
+        bookingMode,
+        setBookingMode,
+        startOwnDesignBooking,
         createBooking,
         confirmBookingPayment,
         cancelBooking,

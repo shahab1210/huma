@@ -1,7 +1,17 @@
 import { useApp } from "../context/AppContext";
 
 export default function Cart() {
-  const { cart, removeFromCart, cartSubtotal, cartBookingAmount, cartRemainingAmount, navigate, user, showToast } = useApp();
+  const {
+    cart,
+    removeFromCart,
+    cartSubtotal,
+    cartBookingAmount,
+    cartRemainingAmount,
+    navigate,
+    user,
+    showToast,
+    startOwnDesignBooking,
+  } = useApp();
 
   const totalMrp = cart.reduce((sum, item) => sum + (item.mrp || item.startingPrice), 0);
   const totalDiscount = totalMrp - cartSubtotal;
@@ -17,19 +27,28 @@ export default function Cart() {
 
   if (cart.length === 0) {
     return (
-      <div className="mx-auto max-w-xl px-5 py-28 text-center">
-        <div className="text-5xl text-gold mb-4" aria-hidden>🛒</div>
+      <div className="mx-auto max-w-xl px-5 py-28 text-center space-y-4">
+        <div className="text-5xl text-gold mb-2" aria-hidden>🛒</div>
         <h1 className="font-display text-3xl text-brand">Your Cart is Empty</h1>
-        <p className="mt-3 text-sm text-muted">
-          Add some bridal mehendi designs, makeup packages, or parlour services to begin your booking.
+        <p className="text-sm text-muted">
+          Add some bridal mehendi designs, makeup packages, or parlour services — or book an appointment with your own custom design!
         </p>
-        <button
-          type="button"
-          onClick={() => navigate("mehendi")}
-          className="mt-8 rounded-md bg-brand px-6 py-2.5 text-sm font-medium tracking-wide text-cream transition-colors hover:bg-brand-700"
-        >
-          Explore Services
-        </button>
+        <div className="flex flex-col sm:flex-row gap-3 justify-center pt-4">
+          <button
+            type="button"
+            onClick={() => navigate("mehendi")}
+            className="rounded-md bg-brand px-6 py-2.5 text-sm font-semibold tracking-wide text-cream transition-colors hover:bg-brand-700"
+          >
+            Explore Catalog Designs
+          </button>
+          <button
+            type="button"
+            onClick={() => startOwnDesignBooking()}
+            className="rounded-md border border-gold bg-gold/15 px-6 py-2.5 text-sm font-semibold tracking-wide text-brand transition-colors hover:bg-gold/25 flex items-center justify-center gap-1.5"
+          >
+            <span>🎨</span> Book with Your Own Design (₹899 Advance)
+          </button>
+        </div>
       </div>
     );
   }

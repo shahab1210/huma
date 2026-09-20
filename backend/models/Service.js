@@ -46,7 +46,7 @@ const serviceSchema = new mongoose.Schema(
     },
     mrp: {
       type: Number,
-      default: 0,
+      default: null,
     },
     discountType: {
       type: String,
@@ -74,15 +74,19 @@ serviceSchema.index({ category: 1 });
 serviceSchema.index({ isAvailable: 1 });
 serviceSchema.index({ isFeatured: 1 });
 
-serviceSchema.pre('save', function (next) {
-  if (this.mrp > 0) {
+serviceSchema.pre('validate', function (next) {
+  if (this.mrp && Number(this.mrp) > 0) {
     if (this.discountType === 'PERCENTAGE') {
-      this.price = Math.round(this.mrp * (1 - this.discountValue / 100));
+      this.price = Math.round(Number(this.mrp) * (1 - (Number(this.discountValue) || 0) / 100));
     } else if (this.discountType === 'FIXED') {
-      this.price = Math.max(0, this.mrp - this.discountValue);
+      this.price = Math.max(0, Number(this.mrp) - (Number(this.discountValue) || 0));
     } else {
-      this.price = this.mrp;
+      this.price = Number(this.mrp);
     }
+  } else {
+    this.mrp = null;
+    this.discountType = 'NONE';
+    this.discountValue = 0;
   }
   next();
 });

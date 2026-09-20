@@ -10,7 +10,7 @@ const bookingItemSchema = new mongoose.Schema(
     },
     itemId: {
       type: mongoose.Schema.Types.ObjectId,
-      required: true,
+      required: false,
     },
     nameSnapshot: {
       type: String,
@@ -110,6 +110,27 @@ const bookingSchema = new mongoose.Schema(
       default: 'DEFAULT',
     },
     homeVisitFee: {
+      type: Number,
+      default: 0,
+    },
+    bookingType: {
+      type: String,
+      enum: ['CATALOG', 'OWN_DESIGN'],
+      default: 'CATALOG',
+    },
+    isOwnDesign: {
+      type: Boolean,
+      default: false,
+    },
+    ownDesignNotes: {
+      type: String,
+      default: '',
+    },
+    bookingAdvance: {
+      type: Number,
+      default: 0,
+    },
+    finalDesignPrice: {
       type: Number,
       default: 0,
     },

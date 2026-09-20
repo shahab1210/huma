@@ -247,10 +247,17 @@ export default function Dashboard() {
                       {/* Top Header Card Info */}
                       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-hairline pb-3">
                         <div>
-                          <p className="text-[10px] font-semibold text-gold uppercase tracking-wider">
-                            Booking ID: {b.bookingId}
-                          </p>
-                          <p className="text-xs text-muted">Created: {new Date(b.createdAt).toLocaleDateString()}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-[10px] font-semibold text-gold uppercase tracking-wider">
+                              Booking ID: {b.bookingId}
+                            </p>
+                            {(b.bookingType === "OWN_DESIGN" || b.isOwnDesign) && (
+                              <span className="rounded bg-purple-100 text-purple-800 text-[10px] font-bold px-1.5 py-0.5 uppercase tracking-wide">
+                                🎨 Own Design
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted mt-0.5">Created: {new Date(b.createdAt).toLocaleDateString()}</p>
                         </div>
                         <div className="flex items-center gap-3">
                           {getPaymentBadge(b.paymentStatus)}
@@ -263,9 +270,15 @@ export default function Dashboard() {
                         <div>
                           <p className="font-semibold text-brand uppercase tracking-wider text-[10px]">Services</p>
                           <p className="mt-1 font-medium">{itemsList || "Custom blocked time"}</p>
-                          <p className="text-muted mt-1 font-semibold text-gold">
-                            ₹{b.totalAmount.toLocaleString("en-IN")} Total
-                          </p>
+                          {b.bookingType === "OWN_DESIGN" || b.isOwnDesign ? (
+                            <p className="text-available mt-1 font-semibold text-xs">
+                              ₹{(b.onlineBookingAmount || b.bookingAdvance || 899).toLocaleString("en-IN")} Advance Paid (Adjusted in final bill)
+                            </p>
+                          ) : (
+                            <p className="text-muted mt-1 font-semibold text-gold">
+                              ₹{b.totalAmount.toLocaleString("en-IN")} Total
+                            </p>
+                          )}
                         </div>
 
                         <div>

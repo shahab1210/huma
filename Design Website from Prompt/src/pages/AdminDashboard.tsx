@@ -76,10 +76,10 @@ export default function AdminDashboard() {
   const [crudName, setCrudName] = useState("");
   const [crudCategory, setCrudCategory] = useState("");
   const [crudDesc, setCrudDesc] = useState("");
-  const [crudPrice, setCrudPrice] = useState<number>(1000);
-  const [crudMrp, setCrudMrp] = useState<number>(1000);
+  const [crudPrice, setCrudPrice] = useState<number | string>(1500);
+  const [crudMrp, setCrudMrp] = useState<number | string>("");
   const [crudDiscountType, setCrudDiscountType] = useState<"NONE" | "PERCENTAGE" | "FIXED">("NONE");
-  const [crudDiscountValue, setCrudDiscountValue] = useState<number>(0);
+  const [crudDiscountValue, setCrudDiscountValue] = useState<number | string>(0);
   const [crudDuration, setCrudDuration] = useState("Approx. 1.5 hrs");
   const [crudType, setCrudType] = useState<Service["type"]>("MEHENDI");
   const [crudFeatured, setCrudFeatured] = useState(false);
@@ -437,7 +437,7 @@ export default function AdminDashboard() {
     setCrudCategory(type === "MEHENDI" ? "Bridal" : type === "MAKEUP" ? "Bridal" : "Skin");
     setCrudDesc("");
     setCrudPrice(1500);
-    setCrudMrp(1500);
+    setCrudMrp("");
     setCrudDiscountType("NONE");
     setCrudDiscountValue(0);
     setCrudDuration("Approx. 1.5 hrs");
@@ -456,10 +456,11 @@ export default function AdminDashboard() {
     setCrudName(item.name);
     setCrudCategory(item.category);
     setCrudDesc(item.description);
-    setCrudPrice(item.startingPrice);
-    setCrudMrp(item.mrp || item.startingPrice);
-    setCrudDiscountType(item.discountType || "NONE");
-    setCrudDiscountValue(item.discountValue || 0);
+    setCrudPrice(item.startingPrice || 0);
+    const hasDiscount = item.mrp && Number(item.mrp) > (item.startingPrice || 0);
+    setCrudMrp(hasDiscount ? item.mrp! : "");
+    setCrudDiscountType(hasDiscount ? (item.discountType || "NONE") : "NONE");
+    setCrudDiscountValue(hasDiscount ? (item.discountValue || 0) : 0);
     setCrudDuration(item.duration);
     setCrudFeatured(!!item.featured);
     setCrudAvailability(item.availability);
@@ -563,13 +564,21 @@ export default function AdminDashboard() {
     e.preventDefault();
     const id = editingItem ? editingItem.id : `custom-${Math.random().toString(36).substr(2, 9)}`;
     
-    // Auto-calculate final selling price
-    let finalPrice = Number(crudMrp);
-    if (crudDiscountType === "PERCENTAGE") {
-      finalPrice = Math.round(crudMrp * (1 - crudDiscountValue / 100));
-    } else if (crudDiscountType === "FIXED") {
-      finalPrice = Math.max(0, crudMrp - crudDiscountValue);
+    const rawMrp = crudMrp !== "" && Number(crudMrp) > 0 ? Number(crudMrp) : null;
+    let finalPrice = Number(crudPrice) || 0;
+
+    if (rawMrp && crudDiscountType !== "NONE") {
+      if (crudDiscountType === "PERCENTAGE") {
+        finalPrice = Math.round(rawMrp * (1 - (Number(crudDiscountValue) || 0) / 100));
+      } else if (crudDiscountType === "FIXED") {
+        finalPrice = Math.max(0, rawMrp - (Number(crudDiscountValue) || 0));
+      }
     }
+
+    const hasValidDiscount = rawMrp !== null && rawMrp > finalPrice;
+    const mrpToSave = hasValidDiscount ? rawMrp : null;
+    const discountTypeToSave = hasValidDiscount ? crudDiscountType : "NONE";
+    const discountValueToSave = hasValidDiscount ? Number(crudDiscountValue || 0) : 0;
 
     const primaryImg = crudImages.length > 0 ? crudImages[0].url : (crudImage || "");
     const imagesArray = crudImages.length > 0
@@ -583,9 +592,9 @@ export default function AdminDashboard() {
       category: crudCategory,
       description: crudDesc,
       startingPrice: finalPrice,
-      mrp: Number(crudMrp),
-      discountType: crudDiscountType,
-      discountValue: Number(crudDiscountValue),
+      mrp: mrpToSave,
+      discountType: discountTypeToSave,
+      discountValue: discountValueToSave,
       duration: crudDuration,
       featured: crudFeatured,
       availability: crudAvailability,
@@ -1130,10 +1139,15 @@ export default function AdminDashboard() {
                         <div className="space-y-2">
                           <div className="flex items-start justify-between gap-2">
                             <div>
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 <span className="font-display text-base font-bold text-brand">
                                   {b.customerName}
                                 </span>
+                                {(b.bookingType === "OWN_DESIGN" || b.isOwnDesign) && (
+                                  <span className="rounded bg-purple-100 text-purple-800 text-[10px] font-bold px-1.5 py-0.5 uppercase tracking-wide">
+                                    🎨 Own Design
+                                  </span>
+                                )}
                                 {isToday && (
                                   <span className="rounded bg-rose-100 text-rose-800 text-[10px] font-bold px-1.5 py-0.5 uppercase tracking-wide">
                                     Today
@@ -1177,12 +1191,21 @@ export default function AdminDashboard() {
 
                           <div className="flex items-center justify-between text-xs pt-1">
                             <div>
-                              <span className="text-muted">Total: </span>
-                              <span className="font-bold text-brand">₹{b.totalAmount.toLocaleString("en-IN")}</span>
-                              {b.remainingAmount > 0 && (
-                                <span className="text-rose-600 text-[11px] ml-2 font-medium">
-                                  (Due: ₹{b.remainingAmount.toLocaleString("en-IN")})
+                              {b.bookingType === "OWN_DESIGN" || b.isOwnDesign ? (
+                                <span className="text-muted">
+                                  Advance Paid: <span className="font-bold text-available">₹{(b.onlineBookingAmount || b.bookingAdvance || 899).toLocaleString("en-IN")}</span>
+                                  <span className="text-slate-600 text-[11px] ml-1.5 font-medium">(Final bill pending quote)</span>
                                 </span>
+                              ) : (
+                                <>
+                                  <span className="text-muted">Total: </span>
+                                  <span className="font-bold text-brand">₹{b.totalAmount.toLocaleString("en-IN")}</span>
+                                  {b.remainingAmount > 0 && (
+                                    <span className="text-rose-600 text-[11px] ml-2 font-medium">
+                                      (Due: ₹{b.remainingAmount.toLocaleString("en-IN")})
+                                    </span>
+                                  )}
+                                </>
                               )}
                             </div>
                             <span className={`text-[11px] font-semibold ${
@@ -1268,8 +1291,14 @@ export default function AdminDashboard() {
                       {/* Booking Metadata Header */}
                       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-hairline pb-3">
                         <div>
-                          <h4 className="font-display text-md text-brand font-semibold flex items-center gap-2">
-                            {b.customerName} <span className="text-[10px] text-gold tracking-widest font-sans font-bold uppercase">ID: {b.bookingId}</span>
+                          <h4 className="font-display text-md text-brand font-semibold flex items-center gap-2 flex-wrap">
+                            {b.customerName}
+                            {(b.bookingType === "OWN_DESIGN" || b.isOwnDesign) && (
+                              <span className="rounded-full bg-purple-100 text-purple-800 text-[10px] font-bold px-2 py-0.5">
+                                🎨 Own Design Appointment
+                              </span>
+                            )}
+                            <span className="text-[10px] text-gold tracking-widest font-sans font-bold uppercase">ID: {b.bookingId}</span>
                           </h4>
                           <p className="text-xs text-muted">Phone: {b.customerMobile} • Logged: {new Date(b.createdAt).toLocaleString()}</p>
                         </div>
@@ -1304,9 +1333,20 @@ export default function AdminDashboard() {
                         <div>
                           <p className="font-semibold text-gold uppercase tracking-wider text-[9px]">Receipt Financials</p>
                           <div className="mt-1 space-y-1">
-                            <p>Total: <span className="font-semibold">₹{b.totalAmount.toLocaleString("en-IN")}</span></p>
-                            <p className="text-available">Paid Online: <span className="font-semibold">₹{b.onlineBookingAmount.toLocaleString("en-IN")}</span></p>
-                            <p className="text-brand">Remaining Due: <span className="font-semibold">₹{b.remainingAmount.toLocaleString("en-IN")}</span></p>
+                            {b.bookingType === "OWN_DESIGN" || b.isOwnDesign ? (
+                              <>
+                                <p>Type: <span className="font-semibold text-purple-700">Own Design</span></p>
+                                <p className="text-available">Booking Advance: <span className="font-semibold">₹{(b.onlineBookingAmount || b.bookingAdvance || 899).toLocaleString("en-IN")}</span></p>
+                                <p className="text-slate-600 text-[11px]">Final Design Price: <span className="italic font-medium">Pending quote</span></p>
+                                <p className="text-brand text-[11px]">Remaining: <span className="italic font-medium">Final Price + Travel Fee - ₹899</span></p>
+                              </>
+                            ) : (
+                              <>
+                                <p>Total: <span className="font-semibold">₹{b.totalAmount.toLocaleString("en-IN")}</span></p>
+                                <p className="text-available">Paid Online: <span className="font-semibold">₹{b.onlineBookingAmount.toLocaleString("en-IN")}</span></p>
+                                <p className="text-brand">Remaining Due: <span className="font-semibold">₹{b.remainingAmount.toLocaleString("en-IN")}</span></p>
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1587,14 +1627,35 @@ export default function AdminDashboard() {
                   </div>
 
                   <div>
-                    <label htmlFor="crud-mrp" className="block text-[11px] font-semibold text-gold uppercase tracking-wider">MRP (₹)</label>
+                    <label htmlFor="crud-price" className="block text-[11px] font-semibold text-gold uppercase tracking-wider">Current / Selling Price (₹)</label>
+                    <input
+                      id="crud-price"
+                      type="number"
+                      required
+                      min={0}
+                      value={(() => {
+                        const rawMrp = crudMrp !== "" && Number(crudMrp) > 0 ? Number(crudMrp) : null;
+                        if (rawMrp && crudDiscountType === "PERCENTAGE") {
+                          return Math.round(rawMrp * (1 - (Number(crudDiscountValue) || 0) / 100));
+                        } else if (rawMrp && crudDiscountType === "FIXED") {
+                          return Math.max(0, rawMrp - (Number(crudDiscountValue) || 0));
+                        }
+                        return crudPrice;
+                      })()}
+                      onChange={(e) => setCrudPrice(e.target.value === "" ? "" : Number(e.target.value))}
+                      className="mt-1 w-full rounded-lg border border-hairline bg-cream/30 px-3 py-2 text-sm focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="crud-mrp" className="block text-[11px] font-semibold text-gold uppercase tracking-wider">Initial / Original Price (MRP ₹) <span className="text-muted lowercase font-normal">(optional)</span></label>
                     <input
                       id="crud-mrp"
                       type="number"
-                      required
-                      min={100}
+                      placeholder="Leave blank if no discount"
+                      min={0}
                       value={crudMrp}
-                      onChange={(e) => setCrudMrp(parseInt(e.target.value) || 0)}
+                      onChange={(e) => setCrudMrp(e.target.value === "" ? "" : Number(e.target.value))}
                       className="mt-1 w-full rounded-lg border border-hairline bg-cream/30 px-3 py-2 text-sm focus:outline-none"
                     />
                   </div>
@@ -1622,28 +1683,27 @@ export default function AdminDashboard() {
                         id="crud-discount-value"
                         type="number"
                         min={0}
-                        max={crudDiscountType === "PERCENTAGE" ? 100 : crudMrp}
+                        max={crudDiscountType === "PERCENTAGE" ? 100 : (Number(crudMrp) || undefined)}
                         value={crudDiscountValue}
-                        onChange={(e) => setCrudDiscountValue(parseInt(e.target.value) || 0)}
+                        onChange={(e) => setCrudDiscountValue(e.target.value === "" ? 0 : Number(e.target.value))}
                         className="mt-1 w-full rounded-lg border border-hairline bg-cream/30 px-3 py-2 text-sm focus:outline-none"
                       />
                     </div>
                   )}
 
-                  <div>
-                    <span className="block text-[11px] font-semibold text-gold uppercase tracking-wider">Final Selling Price (Auto)</span>
-                    <div className="mt-2 text-md font-bold text-brand">
-                      ₹{(() => {
-                        let final = Number(crudMrp);
+                  {crudMrp !== "" && Number(crudMrp) > 0 && crudDiscountType !== "NONE" && (
+                    <div className="sm:col-span-2 rounded-lg bg-amber-50/70 p-3 border border-amber-200/60 text-xs text-brand">
+                      <span className="font-semibold">Discount Preview:</span> Original Price: <span className="line-through">₹{Number(crudMrp).toLocaleString("en-IN")}</span> &rarr; Selling Price: <span className="font-bold text-emerald-700">₹{(() => {
+                        const rawMrp = Number(crudMrp);
                         if (crudDiscountType === "PERCENTAGE") {
-                          final = Math.round(crudMrp * (1 - crudDiscountValue / 100));
+                          return Math.round(rawMrp * (1 - (Number(crudDiscountValue) || 0) / 100)).toLocaleString("en-IN");
                         } else if (crudDiscountType === "FIXED") {
-                          final = Math.max(0, crudMrp - crudDiscountValue);
+                          return Math.max(0, rawMrp - (Number(crudDiscountValue) || 0)).toLocaleString("en-IN");
                         }
-                        return final.toLocaleString("en-IN");
-                      })()}
+                        return rawMrp.toLocaleString("en-IN");
+                      })()}</span>
                     </div>
-                  </div>
+                  )}
 
                   <div>
                     <label htmlFor="crud-dur" className="block text-[11px] font-semibold text-gold uppercase tracking-wider">Duration Estimate</label>

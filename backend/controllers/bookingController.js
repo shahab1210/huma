@@ -22,7 +22,11 @@ const createBooking = async (req, res, next) => {
   try {
     const { items, serviceArea, address, bookingDate, timeSlotId, customerNotes, locationId, mobileNumber, visitMode } = req.body;
 
-    if (!items || !items.length) throw new ApiError(400, 'At least one item is required.');
+    const isOwnDesignAppointment = req.body.bookingType === 'OWN_DESIGN' || req.body.isOwnDesign === true;
+
+    if (!isOwnDesignAppointment && (!items || !items.length)) {
+      throw new ApiError(400, 'At least one item is required.');
+    }
     if (!serviceArea) throw new ApiError(400, 'Service area is required.');
     if (!address) throw new ApiError(400, 'Address is required.');
     if (!bookingDate) throw new ApiError(400, 'Booking date is required.');
@@ -53,78 +57,113 @@ const createBooking = async (req, res, next) => {
     // ── 1. Validate & snapshot items ──
     const bookingItems = [];
     let subtotal = 0;
-
-    for (const item of items) {
-      let doc;
-      let categoryName = '';
-
-      if (item.itemType === 'SERVICE') {
-        doc = await Service.findById(item.itemId).populate('category', 'name');
-        if (!doc || !doc.isAvailable) throw new ApiError(400, `Service "${item.itemId}" is not available.`);
-        categoryName = doc.category?.name || '';
-      } else if (item.itemType === 'DESIGN') {
-        doc = await Design.findById(item.itemId).populate('category', 'name');
-        if (!doc || !doc.isAvailable) throw new ApiError(400, `Design "${item.itemId}" is not available.`);
-        categoryName = doc.category?.name || '';
-      } else {
-        throw new ApiError(400, `Invalid item type: ${item.itemType}`);
-      }
-
-      const qty = item.quantity || 1;
-      subtotal += doc.price * qty;
-
-      bookingItems.push({
-        itemType: item.itemType,
-        itemId: doc._id,
-        nameSnapshot: doc.name,
-        priceSnapshot: doc.price,
-        quantity: qty,
-        durationSnapshot: doc.duration || '',
-        categorySnapshot: categoryName,
-      });
-    }
-
-    // ── 2. Calculate amounts & Validate Rules (server-side truth) ──
-    const settings = (await BusinessSettings.findOne()) || { bookingAmount: 1500, minimumBookingAmount: 2999 };
-    
     let resolvedVisitMode = visitMode === 'HOME_VISIT' ? 'HOME_VISIT' : 'ARTIST_VISIT';
     let homeVisitFee = 0;
 
-    if (resolvedVisitMode === 'HOME_VISIT') {
-      if (locationDoc && !locationDoc.homeVisitEnabled) {
-        throw new ApiError(400, `Home Visit is not available for ${locationDoc.name}.`);
-      }
-      const homeMin = locationDoc?.homeVisitMinimumAmount || 999;
-      const homeFee = locationDoc?.homeVisitFee !== undefined ? locationDoc.homeVisitFee : (homeMin === 999 ? 399 : 0);
-      const freeThreshold = locationDoc?.homeVisitFreeThreshold || 2999;
+    if (isOwnDesignAppointment) {
+      // ── OWN DESIGN BOOKING FLOW ──
+      // ₹899 is ONLY the booking advance amount paid online to confirm the booking.
+      // It is NOT an appointment fee or extra charge; it is adjusted against the customer's final payable amount.
+      subtotal = 899;
+      bookingItems.push({
+        itemType: 'DESIGN',
+        nameSnapshot: 'Custom / Own Mehendi Design (Booking Advance)',
+        priceSnapshot: 899,
+        quantity: 1,
+        durationSnapshot: 'Consultation & Service',
+        categorySnapshot: 'Custom Design',
+      });
 
-      if (subtotal < homeMin) {
-        if (homeMin === 999) {
-          throw new ApiError(400, 'Home Visit is available for bookings of ₹999 or more.');
-        } else {
-          throw new ApiError(400, `Home Visit for ${locationDoc ? locationDoc.name : 'this location'} is available for bookings of ₹${homeMin.toLocaleString('en-IN')} or more.`);
+      if (resolvedVisitMode === 'HOME_VISIT') {
+        if (locationDoc && !locationDoc.homeVisitEnabled) {
+          throw new ApiError(400, `Home Visit is not available for ${locationDoc.name}.`);
         }
-      }
-
-      if (subtotal < freeThreshold) {
-        homeVisitFee = homeFee;
+        // Home Visit travel fee is calculated on the FINAL quoted design price post-service, NOT paid upfront
+        homeVisitFee = 0;
       } else {
+        if (locationDoc && !locationDoc.artistVisitEnabled) {
+          throw new ApiError(400, `Visit the Artist is not available in ${locationDoc.name}. Please select "Home Visit".`);
+        }
+        resolvedVisitMode = 'ARTIST_VISIT';
         homeVisitFee = 0;
       }
     } else {
-      if (locationDoc && !locationDoc.artistVisitEnabled) {
-        throw new ApiError(400, `Visit the Artist is not available in ${locationDoc.name}. Please select "Home Visit".`);
+      // ── CATALOG DESIGN BOOKING FLOW ──
+      for (const item of items) {
+        let doc;
+        let categoryName = '';
+
+        if (item.itemType === 'SERVICE') {
+          doc = await Service.findById(item.itemId).populate('category', 'name');
+          if (!doc || !doc.isAvailable) throw new ApiError(400, `Service "${item.itemId}" is not available.`);
+          categoryName = doc.category?.name || '';
+        } else if (item.itemType === 'DESIGN') {
+          doc = await Design.findById(item.itemId).populate('category', 'name');
+          if (!doc || !doc.isAvailable) throw new ApiError(400, `Design "${item.itemId}" is not available.`);
+          categoryName = doc.category?.name || '';
+        } else {
+          throw new ApiError(400, `Invalid item type: ${item.itemType}`);
+        }
+
+        const qty = item.quantity || 1;
+        subtotal += doc.price * qty;
+
+        bookingItems.push({
+          itemType: item.itemType,
+          itemId: doc._id,
+          nameSnapshot: doc.name,
+          priceSnapshot: doc.price,
+          quantity: qty,
+          durationSnapshot: doc.duration || '',
+          categorySnapshot: categoryName,
+        });
       }
-      // Visit the Artist: No minimum booking restriction (minimum = ₹0)
-      resolvedVisitMode = 'ARTIST_VISIT';
-      homeVisitFee = 0;
+
+      // ── 2. Calculate amounts & Validate Rules for Catalog ──
+      if (resolvedVisitMode === 'HOME_VISIT') {
+        if (locationDoc && !locationDoc.homeVisitEnabled) {
+          throw new ApiError(400, `Home Visit is not available for ${locationDoc.name}.`);
+        }
+        const homeMin = locationDoc?.homeVisitMinimumAmount || 999;
+        const homeFee = locationDoc?.homeVisitFee !== undefined ? locationDoc.homeVisitFee : (homeMin === 999 ? 399 : 0);
+        const freeThreshold = locationDoc?.homeVisitFreeThreshold || 2999;
+
+        if (subtotal < homeMin) {
+          if (homeMin === 999) {
+            throw new ApiError(400, 'Home Visit is available for bookings of ₹999 or more.');
+          } else {
+            throw new ApiError(400, `Home Visit for ${locationDoc ? locationDoc.name : 'this location'} is available for bookings of ₹${homeMin.toLocaleString('en-IN')} or more.`);
+          }
+        }
+
+        if (subtotal < freeThreshold) {
+          homeVisitFee = homeFee;
+        } else {
+          homeVisitFee = 0;
+        }
+      } else {
+        if (locationDoc && !locationDoc.artistVisitEnabled) {
+          throw new ApiError(400, `Visit the Artist is not available in ${locationDoc.name}. Please select "Home Visit".`);
+        }
+        // Visit the Artist: No minimum booking restriction (minimum = ₹0)
+        resolvedVisitMode = 'ARTIST_VISIT';
+        homeVisitFee = 0;
+      }
     }
 
     const totalAmount = subtotal + homeVisitFee;
-    const onlineBookingAmount = Math.min(settings.bookingAmount || 1500, totalAmount);
-    const remainingAmount = totalAmount - onlineBookingAmount;
+    let onlineBookingAmount;
+    if (isOwnDesignAppointment) {
+      // In own-design booking, the customer pays strictly the ₹899 booking advance online
+      onlineBookingAmount = 899;
+    } else {
+      const settings = (await BusinessSettings.findOne()) || { bookingAmount: 1500, minimumBookingAmount: 2999 };
+      onlineBookingAmount = Math.min(settings.bookingAmount || 1500, totalAmount);
+    }
+    const remainingAmount = isOwnDesignAppointment ? 0 : (totalAmount - onlineBookingAmount);
 
     // ── 3. Reserve the time slot atomically ──
+    const settings = (await BusinessSettings.findOne()) || { bookingAmount: 1500, minimumBookingAmount: 2999 };
     const reservationExpiry = new Date(Date.now() + (settings.reservationExpiryMinutes || 15) * 60 * 1000);
 
     const slot = await TimeSlot.findOneAndUpdate(
@@ -164,6 +203,11 @@ const createBooking = async (req, res, next) => {
       address,
       visitMode: resolvedVisitMode,
       homeVisitFee,
+      bookingType: isOwnDesignAppointment ? 'OWN_DESIGN' : 'CATALOG',
+      isOwnDesign: isOwnDesignAppointment,
+      bookingAdvance: isOwnDesignAppointment ? 899 : 0,
+      finalDesignPrice: 0,
+      ownDesignNotes: req.body.ownDesignNotes || '',
       bookingDate: new Date(bookingDate),
       timeSlot: `${slot.startTime} - ${slot.endTime}`,
       timeSlotId: slot._id,

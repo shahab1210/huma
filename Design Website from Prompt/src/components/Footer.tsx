@@ -26,24 +26,24 @@ export default function Footer() {
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-gold">Explore</p>
           <ul className="space-y-1.5 text-xs text-muted font-medium">
             <li>
-              <button type="button" onClick={() => navigate("mehendi")} className="hover:text-gold">
+              <a href="/mehendi" onClick={(e) => { e.preventDefault(); navigate("mehendi"); }} className="hover:text-gold">
                 Mehendi Catalog
-              </button>
+              </a>
             </li>
             <li>
-              <button type="button" onClick={() => navigate("makeup")} className="hover:text-gold">
+              <a href="/makeup" onClick={(e) => { e.preventDefault(); navigate("makeup"); }} className="hover:text-gold">
                 Makeup Packages
-              </button>
+              </a>
             </li>
             <li>
-              <button type="button" onClick={() => navigate("parlour")} className="hover:text-gold">
+              <a href="/parlour" onClick={(e) => { e.preventDefault(); navigate("parlour"); }} className="hover:text-gold">
                 Parlour Services
-              </button>
+              </a>
             </li>
             <li>
-              <button type="button" onClick={() => navigate("faq")} className="hover:text-gold">
+              <a href="/faq" onClick={(e) => { e.preventDefault(); navigate("faq"); }} className="hover:text-gold">
                 FAQ &amp; Booking Guide
-              </button>
+              </a>
             </li>
           </ul>
         </div>

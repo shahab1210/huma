@@ -14,12 +14,12 @@ export default function Header() {
   }, []);
 
   const navItems = [
-    { label: "Home", view: "home" },
-    { label: "Mehendi", view: "mehendi" },
-    { label: "Makeup", view: "makeup" },
-    { label: "Parlour", view: "parlour" },
-    { label: "About", view: "about" },
-    { label: "Contact", view: "contact" },
+    { label: "Home", view: "home", href: "/" },
+    { label: "Mehendi", view: "mehendi", href: "/mehendi" },
+    { label: "Makeup", view: "makeup", href: "/makeup" },
+    { label: "Parlour", view: "parlour", href: "/parlour" },
+    { label: "About", view: "about", href: "/about" },
+    { label: "Contact", view: "contact", href: "/contact" },
   ];
 
   return (
@@ -33,9 +33,9 @@ export default function Header() {
     >
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 lg:px-8">
         {/* Logo */}
-        <button
-          type="button"
-          onClick={() => navigate("home")}
+        <a
+          href="/"
+          onClick={(e) => { e.preventDefault(); navigate("home"); }}
           className="flex items-center gap-2.5 text-left group"
         >
           <div className="flex h-9.5 w-9.5 items-center justify-center rounded-full bg-gradient-to-br from-brand via-brand-700 to-gold/80 text-cream shadow-md group-hover:scale-105 transition-transform duration-300">
@@ -49,21 +49,21 @@ export default function Header() {
               Mehendi &amp; Beauty
             </span>
           </div>
-        </button>
+        </a>
 
         {/* Desktop Nav */}
         <nav className="hidden items-center gap-6 lg:flex">
           {navItems.map((item) => (
-            <button
+            <a
               key={item.view}
-              type="button"
-              onClick={() => navigate(item.view)}
+              href={item.href}
+              onClick={(e) => { e.preventDefault(); navigate(item.view); }}
               className={`text-[12px] font-semibold uppercase tracking-[0.15em] transition-colors hover:text-gold ${
                 currentView === item.view ? "text-gold" : "text-brand/80"
               }`}
             >
               {item.label}
-            </button>
+            </a>
           ))}
         </nav>
 
@@ -119,13 +119,13 @@ export default function Header() {
           )}
 
           {/* Book Now Button */}
-          <button
-            type="button"
-            onClick={() => navigate("mehendi")}
+          <a
+            href="/mehendi"
+            onClick={(e) => { e.preventDefault(); navigate("mehendi"); }}
             className="rounded-md bg-brand px-4 py-2 text-xs font-semibold tracking-wide text-cream transition-colors hover:bg-brand-700"
           >
             Book Now
-          </button>
+          </a>
 
           {/* Hamburger Menu Button */}
           <button
@@ -155,10 +155,11 @@ export default function Header() {
         <div className="border-t border-hairline bg-cream/95 backdrop-blur lg:hidden">
           <nav className="flex flex-col gap-4 px-5 py-6">
             {navItems.map((item) => (
-              <button
+              <a
                 key={item.view}
-                type="button"
-                onClick={() => {
+                href={item.href}
+                onClick={(e) => {
+                  e.preventDefault();
                   navigate(item.view);
                   setIsOpen(false);
                 }}
@@ -167,7 +168,7 @@ export default function Header() {
                 }`}
               >
                 {item.label}
-              </button>
+              </a>
             ))}
 
             {/* Mobile-only session actions */}

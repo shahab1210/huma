@@ -35,6 +35,29 @@ const VALID_STATIC_VIEWS = new Set([
   "contact",
 ]);
 
+/** Client-side fallback so location routes resolve even when the API is unavailable */
+const KNOWN_LOCATION_SLUGS = new Set([
+  "lucknow",
+  "kanpur",
+  "raebareli",
+  "bachhrawan",
+  "lalganj",
+  "fatehpur",
+  "sandila",
+  "lalganj-raebareli",
+]);
+
+/** Client-side fallback so service group routes resolve even when the API is unavailable */
+const KNOWN_SERVICE_GROUP_SLUGS = new Set([
+  "bridal-mehendi",
+  "arabic-mehendi",
+  "traditional-mehendi",
+  "bridal-makeup",
+  "party-makeup",
+  "skin-care",
+  "hair-care",
+]);
+
 function ToastContainer() {
   const { toasts, removeToast } = useApp();
   if (toasts.length === 0) return null;
@@ -99,14 +122,14 @@ function CustomerContent() {
   const { currentView, locations, serviceGroups } = useApp();
 
   const renderView = () => {
-    // Check if currentView is a dynamic location slug
-    const isLocation = locations.some((loc) => loc.slug === currentView);
+    // Check if currentView is a dynamic location slug (API data OR client-side fallback)
+    const isLocation = locations.some((loc) => loc.slug === currentView) || KNOWN_LOCATION_SLUGS.has(currentView);
     if (isLocation) {
       return <LocationPage slug={currentView} />;
     }
 
-    // Check if currentView is a dynamic service group slug
-    const isServiceGroup = serviceGroups.some((sg) => sg.slug === currentView);
+    // Check if currentView is a dynamic service group slug (API data OR client-side fallback)
+    const isServiceGroup = serviceGroups.some((sg) => sg.slug === currentView) || KNOWN_SERVICE_GROUP_SLUGS.has(currentView);
     if (isServiceGroup) {
       return <ServiceGroupPage slug={currentView} />;
     }

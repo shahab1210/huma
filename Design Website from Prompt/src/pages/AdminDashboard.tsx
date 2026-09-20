@@ -84,6 +84,7 @@ export default function AdminDashboard() {
   const [crudType, setCrudType] = useState<Service["type"]>("MEHENDI");
   const [crudFeatured, setCrudFeatured] = useState(false);
   const [crudAvailability, setCrudAvailability] = useState<Service["availability"]>("AVAILABLE");
+  const [crudIsSample, setCrudIsSample] = useState(false);
   const [crudImage, setCrudImage] = useState("");
   const [crudImages, setCrudImages] = useState<DesignImage[]>([]);
   const [imageUrlInput, setImageUrlInput] = useState("");
@@ -443,6 +444,7 @@ export default function AdminDashboard() {
     setCrudDuration("Approx. 1.5 hrs");
     setCrudFeatured(false);
     setCrudAvailability("AVAILABLE");
+    setCrudIsSample(false);
     setCrudImage("");
     setCrudImages([]);
     setImageUrlInput("");
@@ -464,6 +466,7 @@ export default function AdminDashboard() {
     setCrudDuration(item.duration);
     setCrudFeatured(!!item.featured);
     setCrudAvailability(item.availability);
+    setCrudIsSample(!!item.isSample);
     setCrudImage(item.image || "");
 
     // Populate images array
@@ -598,6 +601,7 @@ export default function AdminDashboard() {
       duration: crudDuration,
       featured: crudFeatured,
       availability: crudAvailability,
+      isSample: crudIsSample,
       image: primaryImg,
       images: imagesArray,
     };
@@ -1865,6 +1869,25 @@ export default function AdminDashboard() {
                         <option value="BOOKED">Booked</option>
                         <option value="BLOCKED">Blocked</option>
                       </select>
+                    </label>
+                  </div>
+
+                  <div className="sm:col-span-2 pt-2 border-t border-hairline/60">
+                    <label className="flex items-start gap-2.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={crudIsSample}
+                        onChange={(e) => setCrudIsSample(e.target.checked)}
+                        className="mt-0.5 accent-brand"
+                      />
+                      <div>
+                        <span className="text-xs font-semibold uppercase tracking-wider text-amber-800">
+                          Sample Mode (Promotional / Launch Offer)
+                        </span>
+                        <p className="text-[11px] text-muted">
+                          When enabled, numeric price is hidden from customers and replaced with a &quot;🔥 Special Launch Offer&quot; badge and WhatsApp &quot;Contact Artist&quot; button.
+                        </p>
+                      </div>
                     </label>
                   </div>
                 </div>

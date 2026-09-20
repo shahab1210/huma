@@ -251,54 +251,6 @@ const INITIAL_SERVICES: Service[] = [
     featured: true,
     availability: "AVAILABLE",
   },
-  {
-    id: "mk-bridal",
-    type: "MAKEUP",
-    name: "HD Bridal Makeup",
-    category: "Bridal",
-    description: "Complete bridal makeover with premium HD base, lashes, hair styling, and draping.",
-    duration: "Approx. 2.5 hrs",
-    startingPrice: 8000,
-    image: "https://images.unsplash.com/photo-1783495687666-ca55fe595de4?w=800&h=1000&fit=crop&auto=format&q=80",
-    featured: true,
-    availability: "AVAILABLE",
-  },
-  {
-    id: "mk-party",
-    type: "MAKEUP",
-    name: "Party & Occasion Glam",
-    category: "Occasion",
-    description: "Camera-ready soft or bold glam for sangeet, reception, and celebrations.",
-    duration: "Approx. 1.5 hrs",
-    startingPrice: 2500,
-    image: "https://images.unsplash.com/photo-1610173826014-d131b02d69ca?w=800&h=1000&fit=crop&auto=format&q=80",
-    featured: false,
-    availability: "AVAILABLE",
-  },
-  {
-    id: "par-facial",
-    type: "PARLOUR",
-    name: "Radiance Gold Facial",
-    category: "Skin",
-    description: "Multi-step hydrating gold facial that deep cleanses and brightens the skin.",
-    duration: "Approx. 1 hr",
-    startingPrice: 900,
-    image: "https://images.unsplash.com/photo-1761718210089-ba3bb5ccb54f?w=800&h=1000&fit=crop&auto=format&q=80",
-    featured: false,
-    availability: "AVAILABLE",
-  },
-  {
-    id: "par-wax",
-    type: "PARLOUR",
-    name: "Honey Waxing Full Body",
-    category: "Grooming",
-    description: "Full body waxing using gentle honey wax, leaving skin smooth and hydrated.",
-    duration: "Approx. 1.5 hrs",
-    startingPrice: 1500,
-    image: "https://images.unsplash.com/photo-1512290923902-8a9f81dc236c?w=800&h=1000&fit=crop&auto=format&q=80",
-    featured: false,
-    availability: "AVAILABLE",
-  }
 ];
 
 const INITIAL_REVIEWS: Review[] = [
@@ -431,9 +383,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const storedServices = localStorage.getItem("huma_services");
     if (storedServices) {
       try {
-        setServices(JSON.parse(storedServices));
+        const parsed = JSON.parse(storedServices);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const filtered = parsed.filter((s: any) => !s.id?.startsWith("sc-") && !s.id?.startsWith("par-") && !s.id?.startsWith("mk-") && !s.isSample);
+          const combined = filtered.length > 0 ? filtered : INITIAL_SERVICES;
+          setServices(combined);
+          safeSetLocalStorage("huma_services", JSON.stringify(combined));
+        } else {
+          setServices(INITIAL_SERVICES);
+          safeSetLocalStorage("huma_services", JSON.stringify(INITIAL_SERVICES));
+        }
       } catch {
         setServices(INITIAL_SERVICES);
+        safeSetLocalStorage("huma_services", JSON.stringify(INITIAL_SERVICES));
       }
     } else {
       setServices(INITIAL_SERVICES);
@@ -1206,6 +1168,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             image: s.images?.[0]?.url || s.image || '',
             featured: !!s.isFeatured,
             availability: s.isAvailable ? 'AVAILABLE' : 'BLOCKED',
+            isSample: !!s.isSample,
           };
         });
         merged = [...merged, ...mappedServices];
@@ -1239,7 +1202,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       if (merged.length > 0) {
         setServices(merged);
-        localStorage.setItem("huma_services", JSON.stringify(merged));
+        safeSetLocalStorage("huma_services", JSON.stringify(merged));
+      } else {
+        setServices(INITIAL_SERVICES);
       }
     } catch (e) {
       console.error("Failed to fetch catalog from backend", e);
@@ -2003,6 +1968,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         customizationAvailable: true,
         // for services
         serviceType: service.type,
+        isSample: !!service.isSample,
       };
 
       const res = await fetch(url, {

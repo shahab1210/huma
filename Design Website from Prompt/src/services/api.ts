@@ -47,6 +47,7 @@ export interface Service {
   images?: DesignImage[];
   featured?: boolean;
   availability: Availability;
+  isSample?: boolean;
 }
 
 export interface Testimonial {

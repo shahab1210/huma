@@ -62,10 +62,13 @@ const seed = async () => {
     { name: 'Party Makeup', serviceType: 'MAKEUP', description: 'Glamorous party and event makeup', sortOrder: 2 },
     { name: 'Engagement Makeup', serviceType: 'MAKEUP', description: 'Special engagement ceremony look', sortOrder: 3 },
     // Parlour
-    { name: 'Facial', serviceType: 'PARLOUR', description: 'Professional facial treatments', sortOrder: 1 },
-    { name: 'Hair Styling', serviceType: 'PARLOUR', description: 'Professional hair styling and treatments', sortOrder: 2 },
-    { name: 'Waxing & Threading', serviceType: 'PARLOUR', description: 'Full body waxing and eyebrow threading', sortOrder: 3 },
-    { name: 'Mani-Pedi', serviceType: 'PARLOUR', description: 'Manicure and pedicure services', sortOrder: 4 },
+    { name: 'Skin Care', serviceType: 'PARLOUR', description: 'Professional facial and skin care treatments', sortOrder: 1 },
+    { name: 'Hair Care', serviceType: 'PARLOUR', description: 'Professional hair styling, spa and grooming treatments', sortOrder: 2 },
+    { name: 'Beauty Parlour', serviceType: 'PARLOUR', description: 'Waxing, threading, manicure, pedicure and parlour packages', sortOrder: 3 },
+    { name: 'Facial', serviceType: 'PARLOUR', description: 'Professional facial treatments', sortOrder: 4 },
+    { name: 'Hair Styling', serviceType: 'PARLOUR', description: 'Professional hair styling and treatments', sortOrder: 5 },
+    { name: 'Waxing & Threading', serviceType: 'PARLOUR', description: 'Full body waxing and eyebrow threading', sortOrder: 6 },
+    { name: 'Mani-Pedi', serviceType: 'PARLOUR', description: 'Manicure and pedicure services', sortOrder: 7 },
   ];
 
   const existingCats = await Category.countDocuments();
@@ -105,25 +108,46 @@ const seed = async () => {
   }
 
   /* ══════════════════════════════
-     4. MAKEUP & PARLOUR SERVICES
+     4. MAKEUP & PARLOUR SERVICES (Sample / Starter Catalog)
      ══════════════════════════════ */
   const existingServices = await Service.countDocuments();
   if (existingServices === 0) {
     const serviceData = [
-      // Makeup
-      { name: 'HD Bridal Makeup', category: catMap['Bridal Makeup'], serviceType: 'MAKEUP', price: 15000, duration: '2-3 hours', isFeatured: true, description: 'Premium HD bridal makeup with long-lasting products, includes pre-bridal skin prep.' },
-      { name: 'Airbrush Bridal Makeup', category: catMap['Bridal Makeup'], serviceType: 'MAKEUP', price: 20000, duration: '2-3 hours', isFeatured: true, description: 'Flawless airbrush bridal makeup for that perfect photo finish and all-day wear.' },
-      { name: 'Engagement Look', category: catMap['Engagement Makeup'], serviceType: 'MAKEUP', price: 8000, duration: '1.5-2 hours', description: 'Elegant engagement ceremony makeup with subtle glam and perfect base.' },
-      { name: 'Party Glam Makeup', category: catMap['Party Makeup'], serviceType: 'MAKEUP', price: 5000, duration: '1-1.5 hours', description: 'Bold and glamorous makeup look for parties, receptions, and events.' },
-      { name: 'Soft Glam Look', category: catMap['Party Makeup'], serviceType: 'MAKEUP', price: 3500, duration: '45 min - 1 hour', description: 'Natural yet enhanced soft glam makeup for elegant occasions.' },
-      // Parlour
-      { name: 'Gold Facial', category: catMap['Facial'], serviceType: 'PARLOUR', price: 1500, duration: '45-60 min', isFeatured: true, description: 'Luxurious gold-infused facial for radiant, glowing skin.' },
-      { name: 'Diamond Facial', category: catMap['Facial'], serviceType: 'PARLOUR', price: 2000, duration: '60 min', description: 'Premium diamond facial for deep cleansing and anti-aging benefits.' },
-      { name: 'Bridal Hair Styling', category: catMap['Hair Styling'], serviceType: 'PARLOUR', price: 3000, duration: '1-1.5 hours', isFeatured: true, description: 'Elegant bridal hairstyling with buns, braids, and floral accents.' },
-      { name: 'Party Hair Styling', category: catMap['Hair Styling'], serviceType: 'PARLOUR', price: 1500, duration: '30-45 min', description: 'Trendy hairdos for parties and celebrations.' },
-      { name: 'Full Body Waxing', category: catMap['Waxing & Threading'], serviceType: 'PARLOUR', price: 2500, duration: '1.5-2 hours', description: 'Complete body waxing service with premium wax for smooth, hair-free skin.' },
-      { name: 'Eyebrow Threading & Shaping', category: catMap['Waxing & Threading'], serviceType: 'PARLOUR', price: 200, duration: '15 min', description: 'Expert eyebrow shaping and threading for defined brows.' },
-      { name: 'Luxury Mani-Pedi', category: catMap['Mani-Pedi'], serviceType: 'PARLOUR', price: 1500, duration: '1 hour', description: 'Complete manicure and pedicure with scrub, massage, and nail art.' },
+      // --- MAKEUP (Sample) ---
+      { name: 'Party Makeup', category: catMap['Party Makeup'] || catMap['Bridal Makeup'], serviceType: 'MAKEUP', price: 2500, duration: 'Approx. 1.5 hrs', isFeatured: false, isSample: true, images: [{ url: 'https://images.unsplash.com/photo-1610173826014-d131b02d69ca?w=800&h=1000&fit=crop&auto=format&q=80' }], description: 'Camera-ready soft or bold party glam tailored for sangeet, reception, and festive celebrations.' },
+      { name: 'Engagement Makeup', category: catMap['Engagement Makeup'] || catMap['Party Makeup'], serviceType: 'MAKEUP', price: 5000, duration: 'Approx. 2 hrs', isFeatured: false, isSample: true, images: [{ url: 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=800&h=1000&fit=crop&auto=format&q=80' }], description: 'Radiant engagement makeup look with defined eye artistry, long-lasting base, and hairstyling.' },
+      { name: 'HD Makeup', category: catMap['Party Makeup'] || catMap['Bridal Makeup'], serviceType: 'MAKEUP', price: 4000, duration: 'Approx. 2 hrs', isFeatured: false, isSample: true, images: [{ url: 'https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=800&h=1000&fit=crop&auto=format&q=80' }], description: 'High-definition photo-friendly base and contoured finish that looks seamless in person and under studio lights.' },
+      { name: 'Soft Glam Makeup', category: catMap['Party Makeup'] || catMap['Bridal Makeup'], serviceType: 'MAKEUP', price: 3000, duration: 'Approx. 1.5 hrs', isFeatured: false, isSample: true, images: [{ url: 'https://images.unsplash.com/photo-1512496015851-a90fb38ba796?w=800&h=1000&fit=crop&auto=format&q=80' }], description: 'Subtle, radiant, natural glam emphasizing dewy skin, gentle earthy tones, and refined elegance.' },
+
+      // --- BRIDAL MAKEUP (Sample) ---
+      { name: 'HD Bridal Makeup', category: catMap['Bridal Makeup'], serviceType: 'MAKEUP', price: 12000, duration: 'Approx. 3 hrs', isFeatured: true, isSample: true, images: [{ url: 'https://images.unsplash.com/photo-1783495687666-ca55fe595de4?w=800&h=1000&fit=crop&auto=format&q=80' }], description: 'Complete signature bridal makeover with ultra-HD base, lashes, jewelry setting, hair styling, and dupatta draping.' },
+      { name: 'Airbrush Bridal Makeup', category: catMap['Bridal Makeup'], serviceType: 'MAKEUP', price: 18000, duration: 'Approx. 3 hrs', isFeatured: true, isSample: true, images: [{ url: 'https://images.unsplash.com/photo-1596704017254-9b121068fb31?w=800&h=1000&fit=crop&auto=format&q=80' }], description: 'Flawless, sweat-proof, feather-light airbrush finish designed to last throughout all wedding rituals.' },
+      { name: 'Traditional Bridal Makeup', category: catMap['Bridal Makeup'], serviceType: 'MAKEUP', price: 14000, duration: 'Approx. 3 hrs', isFeatured: false, isSample: true, images: [{ url: 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?w=800&h=1000&fit=crop&auto=format&q=80' }], description: 'Classic cultural bridal look with rich tones, traditional eye accentuation, and meticulous jewellery setting.' },
+      { name: 'Engagement / Reception Makeup', category: catMap['Bridal Makeup'] || catMap['Engagement Makeup'], serviceType: 'MAKEUP', price: 7000, duration: 'Approx. 2.5 hrs', isFeatured: false, isSample: true, images: [{ url: 'https://images.unsplash.com/photo-1500917293891-ef795e70e1f6?w=800&h=1000&fit=crop&auto=format&q=80' }], description: 'Sophisticated modern glamour for ring ceremonies, sangeet night, or grand reception parties.' },
+      { name: 'Bridal Makeup + Hair Styling', category: catMap['Bridal Makeup'], serviceType: 'MAKEUP', price: 15000, duration: 'Approx. 3.5 hrs', isFeatured: false, isSample: true, images: [{ url: 'https://images.unsplash.com/photo-1560066984-138dadb4c035?w=800&h=1000&fit=crop&auto=format&q=80' }], description: 'Comprehensive bridal package covering complete makeup, elaborate bridal hairdo with accessories, and draping.' },
+
+      // --- SKIN CARE (Sample) ---
+      { name: 'Basic Facial', category: catMap['Skin Care'] || catMap['Facial'], serviceType: 'PARLOUR', price: 800, duration: 'Approx. 45 mins', isFeatured: false, isSample: true, images: [{ url: 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=800&h=1000&fit=crop&auto=format&q=80' }], description: 'Gentle cleansing, exfoliation, steam, and hydrating pack for refreshed, healthy skin.' },
+      { name: 'Cleanup', category: catMap['Skin Care'] || catMap['Facial'], serviceType: 'PARLOUR', price: 500, duration: 'Approx. 30 mins', isFeatured: false, isSample: true, images: [{ url: 'https://images.unsplash.com/photo-1512290903829-e5870020db1e?w=800&h=1000&fit=crop&auto=format&q=80' }], description: 'Quick deep pore cleansing, blackhead removal, and soothing mask for instant freshness.' },
+      { name: 'Glow Facial', category: catMap['Skin Care'] || catMap['Facial'], serviceType: 'PARLOUR', price: 1200, duration: 'Approx. 1 hr', isFeatured: true, isSample: true, images: [{ url: 'https://images.unsplash.com/photo-1761718210089-ba3bb5ccb54f?w=800&h=1000&fit=crop&auto=format&q=80' }], description: 'Skin-illuminating facial designed to remove tanning and restore natural skin brightness.' },
+      { name: 'Pre-Bridal Skin Care', category: catMap['Skin Care'] || catMap['Facial'], serviceType: 'PARLOUR', price: 2500, duration: 'Approx. 1.5 hrs', isFeatured: false, isSample: true, images: [{ url: 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?w=800&h=1000&fit=crop&auto=format&q=80' }], description: 'Specialized pre-wedding skin therapy to deeply nourish, tone, and prepare skin for bridal makeup.' },
+      { name: 'Face Cleanup & Care', category: catMap['Skin Care'] || catMap['Facial'], serviceType: 'PARLOUR', price: 700, duration: 'Approx. 45 mins', isFeatured: false, isSample: true, images: [{ url: 'https://images.unsplash.com/photo-1519699047748-de8e457a634e?w=800&h=1000&fit=crop&auto=format&q=80' }], description: 'Rejuvenating face cleanup session with gentle massage and herbal face pack.' },
+
+      // --- HAIR CARE (Sample) ---
+      { name: "Women's Haircut", category: catMap['Hair Care'] || catMap['Hair Styling'], serviceType: 'PARLOUR', price: 600, duration: 'Approx. 45 mins', isFeatured: false, isSample: true, images: [{ url: 'https://images.unsplash.com/photo-1562322140-8baeececf3df?w=800&h=1000&fit=crop&auto=format&q=80' }], description: 'Custom haircut and shape tailored to your face structure and personal style.' },
+      { name: 'Hair Trim', category: catMap['Hair Care'] || catMap['Hair Styling'], serviceType: 'PARLOUR', price: 350, duration: 'Approx. 30 mins', isFeatured: false, isSample: true, images: [{ url: 'https://images.unsplash.com/photo-1605497788044-5a32c7078486?w=800&h=1000&fit=crop&auto=format&q=80' }], description: 'Split ends removal and neat length leveling to maintain healthy hair growth.' },
+      { name: 'Hair Styling', category: catMap['Hair Care'] || catMap['Hair Styling'], serviceType: 'PARLOUR', price: 800, duration: 'Approx. 45 mins', isFeatured: false, isSample: true, images: [{ url: 'https://images.unsplash.com/photo-1522337660859-02fbefca4702?w=800&h=1000&fit=crop&auto=format&q=80' }], description: 'Blow-dry styling, soft curls, or sleek straightening for parties and special occasions.' },
+      { name: 'Hair Spa', category: catMap['Hair Care'] || catMap['Hair Styling'], serviceType: 'PARLOUR', price: 1500, duration: 'Approx. 1 hr', isFeatured: true, isSample: true, images: [{ url: 'https://images.unsplash.com/photo-1560066984-138dadb4c035?w=800&h=1000&fit=crop&auto=format&q=80' }], description: 'Deep conditioning and nourishing hair spa massage to revive dry, damaged hair.' },
+      { name: 'Bridal Hairstyling', category: catMap['Hair Care'] || catMap['Hair Styling'], serviceType: 'PARLOUR', price: 2500, duration: 'Approx. 1 hr', isFeatured: false, isSample: true, images: [{ url: 'https://images.unsplash.com/photo-1595476108010-b4d1f102b1b1?w=800&h=1000&fit=crop&auto=format&q=80' }], description: 'Elaborate traditional or contemporary bridal bun, braid, and floral hair setting.' },
+      { name: 'Party Hairstyling', category: catMap['Hair Care'] || catMap['Hair Styling'], serviceType: 'PARLOUR', price: 1000, duration: 'Approx. 45 mins', isFeatured: false, isSample: true, images: [{ url: 'https://images.unsplash.com/photo-1519699047748-de8e457a634e?w=800&h=1000&fit=crop&auto=format&q=80' }], description: 'Trendy curls, waves, half-updos, and chic braids for party events.' },
+
+      // --- BEAUTY PARLOUR / GROOMING (Sample) ---
+      { name: 'Manicure', category: catMap['Beauty Parlour'] || catMap['Mani-Pedi'], serviceType: 'PARLOUR', price: 600, duration: 'Approx. 45 mins', isFeatured: false, isSample: true, images: [{ url: 'https://images.unsplash.com/photo-1632345031435-8727f6897d53?w=800&h=1000&fit=crop&auto=format&q=80' }], description: 'Nail shaping, cuticle care, hand scrub, relaxing massage, and nail buffing.' },
+      { name: 'Pedicure', category: catMap['Beauty Parlour'] || catMap['Mani-Pedi'], serviceType: 'PARLOUR', price: 800, duration: 'Approx. 50 mins', isFeatured: false, isSample: true, images: [{ url: 'https://images.unsplash.com/photo-1519014816548-bf5fe059798b?w=800&h=1000&fit=crop&auto=format&q=80' }], description: 'Foot soak, exfoliation, callus smoothing, relaxing massage, and nail polish.' },
+      { name: 'Eyebrow Threading & Shaping', category: catMap['Beauty Parlour'] || catMap['Waxing & Threading'], serviceType: 'PARLOUR', price: 100, duration: 'Approx. 15 mins', isFeatured: false, isSample: true, images: [{ url: 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=800&h=1000&fit=crop&auto=format&q=80' }], description: 'Precise eyebrow shaping and threading for clean, well-defined arches.' },
+      { name: 'Upper Lip Threading', category: catMap['Beauty Parlour'] || catMap['Waxing & Threading'], serviceType: 'PARLOUR', price: 60, duration: 'Approx. 10 mins', isFeatured: false, isSample: true, images: [{ url: 'https://images.unsplash.com/photo-1512290903829-e5870020db1e?w=800&h=1000&fit=crop&auto=format&q=80' }], description: 'Quick and hygienic upper lip hair removal for smooth skin.' },
+      { name: 'Full Body Waxing', category: catMap['Beauty Parlour'] || catMap['Waxing & Threading'], serviceType: 'PARLOUR', price: 2000, duration: 'Approx. 1.5 hrs', isFeatured: false, isSample: true, images: [{ url: 'https://images.unsplash.com/photo-1512290923902-8a9f81dc236c?w=800&h=1000&fit=crop&auto=format&q=80' }], description: 'Full arms, legs, and body waxing using gentle skin-friendly wax.' },
+      { name: 'Basic Beauty Package', category: catMap['Beauty Parlour'] || catMap['Waxing & Threading'], serviceType: 'PARLOUR', price: 2500, duration: 'Approx. 2 hrs', isFeatured: true, isSample: true, images: [{ url: 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?w=800&h=1000&fit=crop&auto=format&q=80' }], description: 'All-in-one grooming combo including basic facial, threading, and waxing.' },
     ];
     await Service.insertMany(serviceData);
     console.log(`✓ ${serviceData.length} services created`);

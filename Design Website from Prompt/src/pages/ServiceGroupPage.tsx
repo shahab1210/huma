@@ -24,6 +24,7 @@ interface GroupProduct {
   isFeatured: boolean;
   startingPrice?: number;
   coverage?: string;
+  isSample?: boolean;
 }
 
 const FALLBACK_GROUPS: Record<string, Partial<ServiceGroupData>> = {
@@ -161,7 +162,8 @@ export default function ServiceGroupPage({ slug }: ServiceGroupPageProps) {
   };
 
   const renderProductCard = (product: GroupProduct) => {
-    const hasDiscount = product.mrp && product.mrp > 0 && product.mrp > product.price;
+    const isShowcase = group.parentType !== "MEHENDI" || product.isSample;
+    const hasDiscount = !isShowcase && product.mrp && product.mrp > 0 && product.mrp > product.price;
     const discountPercent = hasDiscount ? Math.round(((product.mrp! - product.price) / product.mrp!) * 100) : 0;
     const imgUrl = product.images?.[0]?.url || '';
 
@@ -170,11 +172,15 @@ export default function ServiceGroupPage({ slug }: ServiceGroupPageProps) {
         {imgUrl && (
           <div className="relative">
             <img src={imgUrl} alt={product.name} className="h-48 w-full object-cover" />
-            {hasDiscount && (
+            {isShowcase ? (
+              <span className="absolute top-2 left-2 rounded-full bg-gradient-to-r from-amber-600 to-amber-700 px-2.5 py-0.5 text-[10px] font-bold text-white shadow-md">
+                🔥 Special Offer
+              </span>
+            ) : hasDiscount ? (
               <span className="absolute top-2 left-2 rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white">
                 {discountPercent}% OFF
               </span>
-            )}
+            ) : null}
           </div>
         )}
         <div className="p-4">
@@ -185,37 +191,60 @@ export default function ServiceGroupPage({ slug }: ServiceGroupPageProps) {
           {product.description && (
             <p className="mt-1 text-xs text-muted line-clamp-2">{product.description}</p>
           )}
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-lg font-bold text-brand">₹{product.price.toLocaleString('en-IN')}</span>
-            {hasDiscount && (
-              <span className="text-xs text-muted line-through">₹{product.mrp!.toLocaleString('en-IN')}</span>
-            )}
-          </div>
+
+          {isShowcase ? (
+            <div className="mt-3 flex flex-col gap-0.5">
+              <span className="text-[13px] font-bold text-amber-700">Available on Consultation</span>
+              <span className="text-xs font-medium text-muted">Contact Artist for Current Price</span>
+            </div>
+          ) : (
+            <div className="mt-3 flex items-baseline gap-2">
+              <span className="text-lg font-bold text-brand">₹{product.price.toLocaleString('en-IN')}</span>
+              {hasDiscount && (
+                <span className="text-xs text-muted line-through">₹{product.mrp!.toLocaleString('en-IN')}</span>
+              )}
+            </div>
+          )}
+
           {product.duration && (
             <p className="mt-1 text-[10px] text-muted">{product.duration}</p>
           )}
-          <button
-            onClick={() => {
-              // Create a Service-compatible object for the cart
-              const cartItem = {
-                id: product._id,
-                type: group.parentType,
-                name: product.name,
-                category: product.category?.name || '',
-                description: product.description,
-                duration: product.duration,
-                startingPrice: product.price,
-                image: imgUrl,
-                featured: product.isFeatured,
-                availability: product.isAvailable ? 'AVAILABLE' as const : 'BLOCKED' as const,
-              };
-              addToCart(cartItem);
-            }}
-            disabled={!product.isAvailable}
-            className="mt-3 w-full rounded-full bg-brand py-2 text-xs font-semibold text-white shadow-sm hover:bg-brand/90 transition disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {product.isAvailable ? 'Add to Cart' : 'Unavailable'}
-          </button>
+
+          {isShowcase ? (
+            <a
+              href={`https://wa.me/918960600371?text=${encodeURIComponent(
+                `Hi Huma Mehendi, I am interested in ${product.name}. Please share the available options, current price and booking details.`
+              )}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-full bg-emerald-700 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-800 transition"
+            >
+              <span>💬</span> Contact Artist
+            </a>
+          ) : (
+            <button
+              onClick={() => {
+                // Create a Service-compatible object for the cart
+                const cartItem = {
+                  id: product._id,
+                  type: group.parentType,
+                  name: product.name,
+                  category: product.category?.name || '',
+                  description: product.description,
+                  duration: product.duration,
+                  startingPrice: product.price,
+                  image: imgUrl,
+                  featured: product.isFeatured,
+                  availability: product.isAvailable ? 'AVAILABLE' as const : 'BLOCKED' as const,
+                };
+                addToCart(cartItem);
+              }}
+              disabled={!product.isAvailable}
+              className="mt-3 w-full rounded-full bg-brand py-2 text-xs font-semibold text-white shadow-sm hover:bg-brand/90 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {product.isAvailable ? 'Add to Cart' : 'Unavailable'}
+            </button>
+          )}
         </div>
       </div>
     );

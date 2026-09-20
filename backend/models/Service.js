@@ -63,6 +63,10 @@ const serviceSchema = new mongoose.Schema(
         ref: 'ServiceGroup',
       },
     ],
+    isSample: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

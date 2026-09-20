@@ -45,12 +45,18 @@ export default function ServiceCard({ service }: { service: Service }) {
         <div className="absolute right-3 top-3">
           <AvailabilityPill status={service.availability} />
         </div>
-        {service.mrp && service.mrp > service.startingPrice && (
-          <div className="absolute left-3 top-3 rounded-full bg-red-500 px-2.5 py-0.5 text-[10px] font-bold text-white shadow-md">
-            {service.discountType === "PERCENTAGE" 
-              ? `${service.discountValue}% OFF` 
-              : `₹${(service.mrp - service.startingPrice).toLocaleString("en-IN")} OFF`}
+        {service.isSample ? (
+          <div className="absolute left-3 top-3 rounded-full bg-gradient-to-r from-amber-600 to-amber-700 px-2.5 py-0.5 text-[10px] font-bold text-white shadow-md">
+            🔥 Special Launch Offer
           </div>
+        ) : (
+          service.mrp && service.mrp > service.startingPrice && (
+            <div className="absolute left-3 top-3 rounded-full bg-red-500 px-2.5 py-0.5 text-[10px] font-bold text-white shadow-md">
+              {service.discountType === "PERCENTAGE" 
+                ? `${service.discountValue}% OFF` 
+                : `₹${(service.mrp - service.startingPrice).toLocaleString("en-IN")} OFF`}
+            </div>
+          )
         )}
       </div>
 
@@ -65,33 +71,54 @@ export default function ServiceCard({ service }: { service: Service }) {
         <span className="my-4 h-px w-10 bg-gold" aria-hidden />
 
         <p className="text-sm text-muted">{service.duration}</p>
-        <div className="mt-1 flex items-baseline gap-2">
-          <p className="text-[15px] font-medium text-brand">
-            Starting from{" "}
-            <span className="text-gold font-bold">₹{service.startingPrice.toLocaleString("en-IN")}</span>
-          </p>
-          {service.mrp && service.mrp > service.startingPrice && (
-            <span className="text-xs text-muted line-through">
-              ₹{service.mrp.toLocaleString("en-IN")}
-            </span>
-          )}
-        </div>
+        {service.isSample ? (
+          <div className="mt-1 flex flex-col gap-0.5">
+            <span className="text-[13px] font-bold text-amber-700">💰 Heavy Discount Available</span>
+            <span className="text-xs font-medium text-muted">Contact Artist for Current Price</span>
+          </div>
+        ) : (
+          <div className="mt-1 flex items-baseline gap-2">
+            <p className="text-[15px] font-medium text-brand">
+              Starting from{" "}
+              <span className="text-gold font-bold">₹{service.startingPrice.toLocaleString("en-IN")}</span>
+            </p>
+            {service.mrp && service.mrp > service.startingPrice && (
+              <span className="text-xs text-muted line-through">
+                ₹{service.mrp.toLocaleString("en-IN")}
+              </span>
+            )}
+          </div>
+        )}
 
-        <button
-          type="button"
-          disabled={unavailable}
-          onClick={handleCartClick}
-          className={
-            "mt-5 w-full rounded-md px-4 py-2.5 text-sm font-semibold tracking-wide transition-colors " +
-            (unavailable
-              ? "cursor-not-allowed bg-hairline text-muted"
-              : isInCart
-              ? "bg-[#4c7a5a] text-cream"
-              : "bg-brand text-cream hover:bg-brand-700")
-          }
-        >
-          {unavailable ? "Unavailable" : isInCart ? "✓ Added in Cart" : "Add to Cart"}
-        </button>
+        {service.isSample ? (
+          <a
+            href={`https://wa.me/918960600371?text=${encodeURIComponent(
+              `Hi Huma Mehendi, I am interested in ${service.name}. Please share the current price and booking details.`
+            )}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="mt-5 flex w-full items-center justify-center gap-1.5 rounded-md bg-emerald-700 px-4 py-2.5 text-sm font-semibold tracking-wide text-white transition-colors hover:bg-emerald-800"
+          >
+            <span>💬</span> Contact Artist
+          </a>
+        ) : (
+          <button
+            type="button"
+            disabled={unavailable}
+            onClick={handleCartClick}
+            className={
+              "mt-5 w-full rounded-md px-4 py-2.5 text-sm font-semibold tracking-wide transition-colors " +
+              (unavailable
+                ? "cursor-not-allowed bg-hairline text-muted"
+                : isInCart
+                ? "bg-[#4c7a5a] text-cream"
+                : "bg-brand text-cream hover:bg-brand-700")
+            }
+          >
+            {unavailable ? "Unavailable" : isInCart ? "✓ Added in Cart" : "Add to Cart"}
+          </button>
+        )}
       </div>
     </article>
   );

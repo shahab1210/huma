@@ -11,9 +11,9 @@ interface SEOHeadProps {
 }
 
 export default function SEOHead({
-  title = 'Huma Mehendi | Professional Mehendi Artist in Lucknow, Raebareli & UP',
-  description = 'Professional mehendi artist offering bridal mehendi, Arabic henna, makeup & beauty services in Lucknow, Kanpur, Raebareli, Sandila, Fatehpur & UP.',
-  keywords = 'mehendi artist, bridal mehendi, mehendi artist lucknow, mehendi artist raebareli, mehendi artist kanpur, henna artist',
+  title = 'Huma Mehendi – Mehendi Artist in Lalganj, Raebareli, Uttar Pradesh',
+  description = 'Huma Mehendi offers bridal mehendi, Arabic henna, and beauty services based in Lalganj, Raebareli, also serving Lucknow, Kanpur, Sandila & Fatehpur, UP.',
+  keywords = 'mehendi artist lalganj, mehendi artist raebareli, bridal mehendi lalganj, mehendi artist lucknow, mehendi artist kanpur, henna artist',
   canonicalUrl = '',
   ogImage = 'https://images.unsplash.com/photo-1762162089047-97e09435984d?w=1200&h=630&fit=crop',
   ogType = 'website',
@@ -82,7 +82,7 @@ export default function SEOHead({
 
     // Cleanup on unmount
     return () => {
-      document.title = 'Huma Mehendi | Professional Mehendi Artist';
+      document.title = 'Huma Mehendi – Mehendi Artist in Lalganj, Raebareli, Uttar Pradesh';
     };
   }, [title, description, keywords, canonicalUrl, ogImage, ogType, structuredData]);
 

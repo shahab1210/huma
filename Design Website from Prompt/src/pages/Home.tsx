@@ -207,9 +207,9 @@ export default function Home() {
   return (
     <div className="space-y-4">
       <SEOHead
-        title="Huma Mehendi – Professional Mehendi Artist in Lucknow, Raebareli & UP"
-        description="Looking for the best mehendi artist in Lucknow, Raebareli, Kanpur, Sandila & Fatehpur? Huma Mehendi offers expert bridal mehendi, Arabic henna, makeup & parlour services."
-        keywords="best mehendi artist in lucknow, mehendi artist lucknow, best mehendi lucknow, top mehendi artist lucknow, bridal mehendi lucknow, wedding mehendi lucknow, mehendi designer lucknow, best mehendi artist in raebareli, mehendi artist raebareli, bridal mehendi raebareli"
+        title="Huma Mehendi – Mehendi Artist in Lalganj, Raebareli, Uttar Pradesh"
+        description="Huma Mehendi offers bridal mehendi, Arabic henna, and beauty services based in Lalganj, Raebareli, also serving Lucknow, Kanpur, Sandila &amp; Fatehpur, UP."
+        keywords="mehendi artist lalganj, mehendi artist lalganj raebareli, mehendi artist raebareli, bridal mehendi lalganj, mehendi artist lucknow, mehendi artist kanpur, henna artist"
         canonicalUrl="https://humamehendi.in/"
         structuredData={[
           {
@@ -219,15 +219,21 @@ export default function Home() {
             url: 'https://humamehendi.in',
             telephone: '+918960600371',
             email: 'humamehendi1210@gmail.com',
-            description: 'Professional mehendi artist offering bridal mehendi, Arabic henna, makeup & beauty services in Lucknow, Kanpur, Raebareli, Sandila, Fatehpur & UP.',
+            description: 'Huma Mehendi offers bridal mehendi, Arabic henna, and beauty services based in Lalganj, Raebareli, also serving Lucknow, Kanpur, Sandila & Fatehpur, Uttar Pradesh.',
+            address: {
+              '@type': 'PostalAddress',
+              addressLocality: 'Lalganj',
+              addressRegion: 'Uttar Pradesh',
+              addressCountry: 'IN',
+            },
             areaServed: [
+              { '@type': 'City', name: 'Lalganj, Raebareli' },
+              { '@type': 'City', name: 'Raebareli' },
+              { '@type': 'City', name: 'Sandila, Hardoi' },
               { '@type': 'City', name: 'Lucknow' },
               { '@type': 'City', name: 'Kanpur' },
-              { '@type': 'City', name: 'Raebareli' },
               { '@type': 'City', name: 'Fatehpur' },
-              { '@type': 'City', name: 'Sandila' },
-              { '@type': 'City', name: 'Lalganj' },
-              { '@type': 'City', name: 'Bachhrawan' },
+              { '@type': 'City', name: 'Bachhrawan, Raebareli' },
             ],
             sameAs: [
               'https://www.instagram.com/huma_mehendi_06'
